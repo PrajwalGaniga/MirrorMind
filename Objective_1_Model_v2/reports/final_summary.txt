@@ -1,0 +1,21 @@
+MirrorMind — Objective 1 Final Summary
+==================================================
+Date        : 2026-04-20 13:50
+Dataset     : 1,284 rows, 10 classes
+Split       : 898 / 193 / 193
+Embedding   : all-MiniLM-L6-v2 (384d)
+Best Model  : XGBoost
+
+TEST RESULTS:
+  Accuracy  : 0.6684
+  F1-Macro  : 0.6637
+  ROC-AUC   : 0.9261
+  Top-3 Acc : 0.9223
+  Val-Test Gap: +0.1025
+
+ALL MODEL COMPARISON (VAL):
+    model  accuracy  f1_macro  f1_weighted  roc_auc  top3_acc
+  XGBoost    0.7668    0.7662       0.7656   0.9499    0.9637
+NeuralNet    0.7254    0.7243       0.7204   0.9477    0.8860
+   LogReg    0.6788    0.6840       0.6548   0.9425    0.9223
+ LightGBM    0.7306    0.7239       0.7297   0.9346    0.9326

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pymongo
+python-jose[cryptography]
+python-dotenv
+sentence-transformers==2.7.0
+torch
+numpy
+scikit-learn
+xgboost
+lightgbm

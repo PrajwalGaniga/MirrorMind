@@ -1,0 +1,22 @@
+Model: XGBoost
+Test Date: 2026-04-20 13:50
+Accuracy : 0.6684
+F1-Macro : 0.6637
+ROC-AUC  : 0.9261
+
+                 precision    recall  f1-score   support
+
+  AIML_ENGINEER       0.90      1.00      0.95        19
+  CYBERSECURITY       0.78      1.00      0.88         7
+   DATA_ANALYST       0.72      0.72      0.72        25
+  DATA_ENGINEER       0.50      0.46      0.48        26
+   DEVOPS_CLOUD       0.75      0.90      0.82        20
+   EMBEDDED_IOT       1.00      0.50      0.67         6
+  FULLSTACK_DEV       0.15      0.14      0.15        14
+PRODUCT_MANAGER       0.88      0.88      0.88        16
+    SWE_BACKEND       0.64      0.63      0.63        51
+   SWE_FRONTEND       0.50      0.44      0.47         9
+
+       accuracy                           0.67       193
+      macro avg       0.68      0.67      0.66       193
+   weighted avg       0.66      0.67      0.66       193
