@@ -1,0 +1,77 @@
+Design a mobile app UI in a Retro Pixel UI × Modern Mobile Dashboard style.
+
+VISUAL LANGUAGE:
+
+* Warm light-gray canvas background (#ECE8E6)
+* White floating cards with thick 3px black borders
+* Large rounded corners (24px)
+* Flat pastel accent colors only: lavender (#DCC8FF), mint (#CFF3B2), peach (#FFDCA8), soft red (#FFB7B7)
+* Minimal 4px offset shadow with 12% opacity
+* No glassmorphism, no blur, no gradients on the main background
+
+LAYOUT:
+
+* 20px horizontal padding
+* 16px vertical spacing between sections
+* 12px spacing between cards
+* 16px internal card padding
+* Floating bottom navigation with 72px height and 22px radius
+
+TYPOGRAPHY:
+
+* Font family: Inter (fallback: Manrope, Space Grotesk)
+* Main heading: 32px, weight 700, color #111111
+* Section title: 20px, weight 600
+* Card title: 16px, weight 600
+* Body text: 14px, weight 500, color #3A3A3A
+* Caption: 12px, weight 500, color #6B6B6B
+* Large metric numbers: 32px, weight 700
+
+BUTTONS:
+
+* Height 48px
+* Radius 14px
+* 3px black border
+* Primary background #DCC8FF
+* Secondary background #FFFFFF
+* Icon buttons are 44x44 circular
+
+SEARCH BAR:
+
+* Height 48px
+* White background
+* 3px black border
+* Radius 14px
+* 14px text with 20px search icon
+
+CARDS:
+
+* White base cards with thick black outlines
+* Colored feature cards may use a single pastel fill
+* Slight playful rotation allowed (-2° to +2°)
+* Cards should feel like physical stickers placed on the screen
+
+CHARTS:
+
+* Hand-drawn sketch style
+* 2.5px black stroke
+* Rounded line caps
+* Pastel highlight markers
+* Soft gray grid lines (#D8D2CE)
+
+BOTTOM NAVIGATION:
+
+* White floating container with black border
+* Active item gets a lavender rounded-square background
+* Icons are 24px monochrome
+* Labels are 11px weight 600
+
+ANIMATION:
+
+* 250ms ease-out page transitions
+* Card press scale 0.98
+* Shadow reduces from 4px to 2px on press
+* Subtle floating motion for featured cards
+
+OVERALL FEEL:
+Playful, tactile, premium, and highly readable. The UI should look like a modern productivity dashboard inspired by retro handheld interfaces and sticker-book aesthetics, with strong borders, soft pastel tones, and generous spacing.

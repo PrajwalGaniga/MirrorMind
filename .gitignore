@@ -1,0 +1,93 @@
+# ----------------------------------------------------------------------
+# Credentials and Secrets (CRITICAL)
+# ----------------------------------------------------------------------
+.env
+*.env
+.env.local
+.env.development
+.env.test
+.env.production
+credentials.json
+client_secret.json
+*.pem
+*.key
+*.cert
+
+# ----------------------------------------------------------------------
+# Python / FastAPI Backend
+# ----------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+.venv/
+.env/
+pip-log.txt
+pip-delete-this-directory.txt
+*.sqlite3
+*.db
+backend/mirrormind.db
+
+# ----------------------------------------------------------------------
+# Flutter / Dart Mobile App
+# ----------------------------------------------------------------------
+mobile-app/.dart_tool/
+mobile-app/build/
+mobile-app/.pub-cache/
+mobile-app/.pub/
+mobile-app/.packages
+mobile-app/.flutter-plugins
+mobile-app/.flutter-plugins-dependencies
+mobile-app/android/local.properties
+mobile-app/android/key.properties
+mobile-app/android/.gradle/
+mobile-app/ios/.symlinks/
+mobile-app/ios/Pods/
+
+# ----------------------------------------------------------------------
+# Node.js / React Frontend
+# ----------------------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ----------------------------------------------------------------------
+# Data Science / Machine Learning (Large Files)
+# ----------------------------------------------------------------------
+# Ignore large dataset folders
+dataset/
+Objective_1_Model_v2/data/
+# Ignore large data formats anywhere
+*.csv
+*.tsv
+*.zip
+*.tar.gz
+*.rar
+*.h5
+*.hdf5
+# (Optional) If you have large models outside the backend/ml_models folder
+# *.pt
+# *.pkl
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# ----------------------------------------------------------------------
+# OS / IDE Files
+# ----------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -5,10 +5,10 @@ import pickle
 import numpy as np
 from pathlib import Path
 
-MODEL_DIR = Path(__file__).parent.parent / "models"
+MODEL_DIR = Path(__file__).parent.parent / "ml_models"
 
 # ── Mock fallback ──────────────────────────────────────────────────────────────
-USE_MOCK = not (MODEL_DIR / "label_encoder.pkl").exists()
+USE_MOCK = False
 
 MOCK_PREDICTIONS = [
     {"rank": 1, "role": "AIML_ENGINEER",  "label": "AI / ML Engineer",    "confidence": 0.71},
@@ -115,7 +115,7 @@ def predict_career(skills: list, cgpa: float = None,
     predictions = [
         {
             "rank": i + 1,
-            "role": _le.classes_[idx],
+            "role": str(_le.classes_[idx]),
             "confidence": float(round(proba[idx], 4)),
         }
         for i, idx in enumerate(top_indices)

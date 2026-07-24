@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
-from bson import ObjectId
-from db import students_collection
+from sqlalchemy.orm import Session
+from db import get_db
 from auth_utils import get_current_user
+from models.db_models import Student
 from inference.predictor import predict_career, USE_MOCK, MOCK_PREDICTIONS
 
 router = APIRouter()
@@ -57,23 +58,22 @@ def _build_insight(predictions: list, skills: list) -> str:
     return "Diversify your skills across projects and internships to boost prediction confidence"
 
 
-def _serialize(doc: dict) -> dict:
-    doc["_id"] = str(doc["_id"])
-    if "user_id" in doc:
-        doc["user_id"] = str(doc["user_id"])
-    return doc
-
-
 @router.get("/predict")
-def predict(user_id: str = Depends(get_current_user)):
-    student = students_collection.find_one({"user_id": ObjectId(user_id)})
+def predict(user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    student = db.query(Student).filter_by(user_id=user_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found. Please complete onboarding first.")
 
-    skills = student.get("skills", [])
-    cgpa = float(student.get("cgpa", 0))
-    projects = int(student.get("projects_count", 0))
-    internships = int(student.get("internship_count", 0))
+    skills = student.skills or []
+    
+    projects = len(student.projects)
+    internships = len(student.internships)
+    
+    if student.semester_records:
+        total_credits = sum(r.credits_earned for r in student.semester_records)
+        cgpa = float(sum(r.sgpa * r.credits_earned for r in student.semester_records) / total_credits) if total_credits > 0 else 0.0
+    else:
+        cgpa = 0.0
 
     skill_radar = _compute_radar(skills, cgpa, projects, internships)
 
@@ -94,15 +94,13 @@ def predict(user_id: str = Depends(get_current_user)):
 
     top_insight = _build_insight(predictions, skills)
 
-    students_collection.update_one(
-        {"user_id": ObjectId(user_id)},
-        {"$set": {"predictions": predictions}},
-    )
+    student.predictions = predictions
+    db.commit()
 
     return {
-        "student_id": str(student["_id"]),
-        "name": student.get("name", ""),
-        "branch": student.get("branch", ""),
+        "student_id": student.id,
+        "name": student.name or "",
+        "branch": student.branch or "",
         "cgpa": cgpa,
         "predictions": predictions,
         "skill_radar": skill_radar,

@@ -1,14 +1,20 @@
-from pymongo import MongoClient
-from dotenv import load_dotenv
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
 
 load_dotenv()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-DB_NAME = os.getenv("DB_NAME", "mirrormind")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-client = MongoClient(MONGO_URI)
-db = client[DB_NAME]
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-users_collection = db["users"]
-students_collection = db["students"]
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

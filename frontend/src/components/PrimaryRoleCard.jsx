@@ -22,18 +22,12 @@ export default function PrimaryRoleCard({ prediction }) {
           >
             <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />
             <RadialBar
-              background={{ fill: 'rgba(255,255,255,0.04)' }}
+              background={{ fill: 'rgba(0,0,0,0.06)' }}
               dataKey="value"
               angleAxisId={0}
-              fill="url(#gaugeGrad)"
-              cornerRadius={10}
+              fill="#111111"
+              cornerRadius={8}
             />
-            <defs>
-              <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#6366f1" />
-                <stop offset="100%" stopColor="#8b5cf6" />
-              </linearGradient>
-            </defs>
           </RadialBarChart>
           <div className="conf-pct-center">
             <div className="conf-pct-number">{pct}%</div>

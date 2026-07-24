@@ -1,44 +1,43 @@
-from fastapi import APIRouter, HTTPException, status
-from datetime import datetime
-from bson import ObjectId
-from db import users_collection
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from db import get_db
 from auth_utils import create_access_token
 from models.user import UserRegister, UserLogin
+from models.db_models import User
 
 router = APIRouter()
 
 
 @router.post("/register")
-def register(data: UserRegister):
-    existing = users_collection.find_one({"email": data.email})
+def register(data: UserRegister, db: Session = Depends(get_db)):
+    existing = db.query(User).filter_by(email=data.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    user_doc = {
-        "name": data.name,
-        "email": data.email,
-        "password": data.password,  # plain text — demo only
-        "created_at": datetime.utcnow(),
-    }
-    result = users_collection.insert_one(user_doc)
-    user_id = str(result.inserted_id)
+    new_user = User(
+        name=data.name,
+        email=data.email,
+        password=data.password,  # plain text — demo only
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
 
-    token = create_access_token({"sub": user_id, "email": data.email})
+    token = create_access_token({"sub": new_user.id, "email": new_user.email})
     return {
         "token": token,
-        "user": {"id": user_id, "name": data.name, "email": data.email},
+        "user": {"id": new_user.id, "name": new_user.name, "email": new_user.email},
     }
 
 
 @router.post("/login")
-def login(data: UserLogin):
-    user = users_collection.find_one({"email": data.email})
-    if not user or user["password"] != data.password:
+def login(data: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(email=data.email).first()
+    if not user or user.password != data.password:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    user_id = str(user["_id"])
-    token = create_access_token({"sub": user_id, "email": data.email})
+    token = create_access_token({"sub": user.id, "email": user.email})
     return {
         "token": token,
-        "user": {"id": user_id, "name": user["name"], "email": user["email"]},
+        "user": {"id": user.id, "name": user.name, "email": user.email},
     }

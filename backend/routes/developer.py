@@ -3,7 +3,9 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from bson import ObjectId
-from db import students_collection
+from db import get_db
+from models.db_models import Student
+from sqlalchemy.orm import Session
 from auth_utils import decode_token
 from inference.predictor import predict_career, build_profile_text, USE_MOCK
 
@@ -194,7 +196,7 @@ def developer_demo():
 
 
 @router.get("/my-pipeline")
-def my_pipeline(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+def my_pipeline(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)):
     if not credentials:
         raise HTTPException(status_code=401, detail="Login to run on your real profile")
     payload = decode_token(credentials.credentials)
@@ -202,19 +204,28 @@ def my_pipeline(credentials: HTTPAuthorizationCredentials = Depends(bearer_schem
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    student = students_collection.find_one({"user_id": ObjectId(user_id)})
+    student = db.query(Student).filter_by(user_id=user_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="No profile found. Complete onboarding first.")
 
+    projects = len(student.projects)
+    internships = len(student.internships)
+    
+    if student.semester_records:
+        total_credits = sum(r.credits_earned for r in student.semester_records)
+        cgpa = float(sum(r.sgpa * r.credits_earned for r in student.semester_records) / total_credits) if total_credits > 0 else 0.0
+    else:
+        cgpa = 0.0
+
     demo_format = {
-        "name": student.get("name", ""),
-        "branch": student.get("branch", ""),
-        "cgpa": float(student.get("cgpa", 0)),
-        "semester": student.get("semester", 0),
-        "skills": student.get("skills", []),
-        "projects": int(student.get("projects_count", 0)),
-        "internships": int(student.get("internship_count", 0)),
-        "career_interest": student.get("career_interest", "")
+        "name": student.name or "",
+        "branch": student.branch or "",
+        "cgpa": cgpa,
+        "semester": student.semester or 0,
+        "skills": student.skills or [],
+        "projects": projects,
+        "internships": internships,
+        "career_interest": student.career_interest or ""
     }
     result = _build_pipeline(demo_format, 0)
     return result
