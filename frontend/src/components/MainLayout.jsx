@@ -12,6 +12,7 @@ export default function MainLayout() {
     { path: '/internships', label: 'Internships', icon: '💼' },
     { path: '/profile', label: 'Profile', icon: '👤' },
     { path: '/settings', label: 'Settings', icon: '⚙️' },
+    { path: '/extension', label: 'Extension', icon: '💻' },
   ];
 
   return (

@@ -11,6 +11,7 @@ import Internships from './pages/Internships';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Developer from './pages/Developer';
+import Extension from './pages/Extension';
 import MainLayout from './components/MainLayout';
 import './index.css';
 
@@ -42,6 +43,7 @@ function AppRoutes() {
         <Route path="/internships" element={<Internships />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/extension" element={<Extension />} />
       </Route>
 
       <Route path="/developer" element={<Developer />} />

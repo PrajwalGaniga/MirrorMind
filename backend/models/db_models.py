@@ -144,3 +144,43 @@ class PredictionCache(Base):
 
     user = relationship("User", back_populates="prediction_cache")
 
+
+class ExtensionActivityLog(Base):
+    """Records activity events fired from the VS Code extension (e.g. file saves)."""
+    __tablename__ = "extension_activity_log"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    event_type = Column(String, nullable=False)   # e.g. 'file_saved'
+    file_path = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", backref="activity_logs")
+
+
+class ErrorLog(Base):
+    """Stores VS Code diagnostic errors captured on file save, one row per unique fingerprint per user."""
+    __tablename__ = "error_logs"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    file_path = Column(String, nullable=False)
+    error_message = Column(String, nullable=False)
+    line = Column(Integer, nullable=False)
+    source = Column(String, nullable=True)          # e.g. 'pylance', 'eslint'
+    error_code = Column(String, nullable=True)      # e.g. 'reportMissingImports'
+    fingerprint = Column(String, index=True, nullable=False)  # SHA-256 of file:line:message
+    hint = Column(String, nullable=True)
+    corrected_block = Column(String, nullable=True)
+    explanation = Column(String, nullable=True)
+    gemini_fetched_at = Column(DateTime, nullable=True)
+    code_context = Column(String, nullable=True)
+    resolved_via = Column(String, nullable=True)    # 'hint' | 'full_fix' | 'unresolved'
+    resolved_at = Column(DateTime, nullable=True)
+    hidden_by_user = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", backref="error_logs")
+
+
+

@@ -5,7 +5,7 @@ from sqlalchemy import text
 
 from db import Base, engine, get_db
 import models.db_models
-from routes import auth, students, predict, developer, uploads, settings
+from routes import auth, students, predict, developer, uploads, settings, extension
 
 # Create all database tables
 Base.metadata.create_all(bind=engine)
@@ -26,6 +26,7 @@ app.include_router(predict.router, prefix="/api", tags=["Predict"])
 app.include_router(developer.router, prefix="/api/developer", tags=["Developer"])
 app.include_router(uploads.router, prefix="/api/upload", tags=["Uploads"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(extension.router, prefix="/api/extension", tags=["Extension"])
 
 @app.get("/")
 def root():

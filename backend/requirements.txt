@@ -13,3 +13,4 @@ xgboost
 lightgbm
 pymongo
 cloudinary
+google-genai
