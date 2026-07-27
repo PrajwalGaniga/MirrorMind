@@ -41,6 +41,7 @@ class StudentProfile(BaseModel):
     cgpa: float = 0.0
     backlog_count: int
     skills: List[str] = []
+    certifications: List[str] = []
     career_interest: str
     communication_rating: int
     work_style_pref: str

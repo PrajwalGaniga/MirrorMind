@@ -1,10 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DevConsoleProvider } from './context/DevConsoleContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
+import Predict from './pages/Predict';
+import Projects from './pages/Projects';
+import Internships from './pages/Internships';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import Developer from './pages/Developer';
+import MainLayout from './components/MainLayout';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -26,7 +33,17 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
       <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>} />
-      <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+      
+      {/* Layout Routes */}
+      <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/predict" element={<Predict />} />
+        <Route path="/internships" element={<Internships />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+
       <Route path="/developer" element={<Developer />} />
     </Routes>
   );
@@ -36,7 +53,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <DevConsoleProvider>
+          <AppRoutes />
+        </DevConsoleProvider>
       </AuthProvider>
     </BrowserRouter>
   );

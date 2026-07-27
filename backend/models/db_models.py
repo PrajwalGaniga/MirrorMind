@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, JSON, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -18,6 +18,21 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     student_profile = relationship("Student", back_populates="user", uselist=False)
+    extension_api_key = relationship("ExtensionAPIKey", back_populates="user", uselist=False)
+    prediction_cache = relationship("PredictionCache", back_populates="user", uselist=False)
+
+class ExtensionAPIKey(Base):
+    __tablename__ = "extension_api_keys"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    user_id = Column(String, ForeignKey("users.id"), unique=True, index=True, nullable=False)
+    key_prefix = Column(String, nullable=False)
+    key_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, default=False)
+
+    user = relationship("User", back_populates="extension_api_key")
 
 
 class Skill(Base):
@@ -109,3 +124,23 @@ class Student(Base):
     internships = relationship("Internship", back_populates="student")
     projects = relationship("Project", back_populates="student")
     semester_records = relationship("SemesterRecord", back_populates="student")
+
+
+class PredictionCache(Base):
+    """Stores the last successfully computed ML predictions per user.
+    
+    Acts as a permanent fallback — if ML fails, we return stale-but-valid data
+    rather than showing an error. Updated every time ML succeeds.
+    """
+    __tablename__ = "prediction_cache"
+
+    id = Column(String, primary_key=True, default=generate_uuid, index=True)
+    user_id = Column(String, ForeignKey("users.id"), unique=True, index=True, nullable=False)
+    predictions = Column(JSON, nullable=False)
+    skill_radar = Column(JSON, nullable=True)
+    top_insight = Column(String, nullable=True)
+    cgpa = Column(Float, nullable=True)
+    computed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="prediction_cache")
+

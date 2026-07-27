@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { devLogger } from '../utils/logger';
 
 const USE_NGROK = false; // Set to false to use localhost
 
@@ -18,7 +19,20 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  devLogger.log('info', 'API', `REQ: ${config.method.toUpperCase()} ${config.url}`, config.data || config.params);
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => {
+    devLogger.log('success', 'API', `RES: ${response.config.method.toUpperCase()} ${response.config.url} [${response.status}]`, response.data);
+    return response;
+  },
+  (error) => {
+    devLogger.log('error', 'API', `ERR: ${error.config?.method?.toUpperCase()} ${error.config?.url} [${error.response?.status}]`, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 export default api;

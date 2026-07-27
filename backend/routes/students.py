@@ -84,29 +84,28 @@ def save_profile(
         for key, value in base_data.items():
             setattr(student, key, value)
         student.predictions = None
-        db.query(Internship).filter_by(student_id=student.id).delete()
-        db.query(Project).filter_by(student_id=student.id).delete()
-        for sem in student.semester_records:
-            db.query(SubjectMark).filter_by(semester_record_id=sem.id).delete()
-        db.query(SemesterRecord).filter_by(student_id=student.id).delete()
+        # We NO LONGER delete internships, projects, or semester_records here.
+        # They are managed via their own dedicated endpoints (POST /projects, etc.)
     else:
         student = Student(**base_data, user_id=user_id)
         db.add(student)
         db.commit()
+        db.refresh(student)
 
-    for internship_data in profile.internships:
-        db.add(Internship(**internship_data.dict(), student_id=student.id))
+        # Only on initial creation do we populate any nested data sent in the profile
+        for internship_data in profile.internships:
+            db.add(Internship(**internship_data.dict(), student_id=student.id))
 
-    for project_data in profile.projects:
-        db.add(Project(**project_data.dict(), student_id=student.id))
+        for project_data in profile.projects:
+            db.add(Project(**project_data.dict(), student_id=student.id))
 
-    for sem_data in profile.semester_records:
-        sem_dict = sem_data.dict(exclude={"subjects"})
-        sem_record = SemesterRecord(**sem_dict, student_id=student.id)
-        db.add(sem_record)
-        db.commit()
-        for sub_data in sem_data.subjects:
-            db.add(SubjectMark(**sub_data.dict(), semester_record_id=sem_record.id))
+        for sem_data in profile.semester_records:
+            sem_dict = sem_data.dict(exclude={"subjects"})
+            sem_record = SemesterRecord(**sem_dict, student_id=student.id)
+            db.add(sem_record)
+            db.commit()
+            for sub_data in sem_data.subjects:
+                db.add(SubjectMark(**sub_data.dict(), semester_record_id=sem_record.id))
 
     db.commit()
     db.refresh(student)
@@ -163,6 +162,7 @@ def add_internship(
         raise HTTPException(status_code=404, detail="Complete onboarding first")
     internship = Internship(**data.dict(), student_id=student.id)
     db.add(internship)
+    student.predictions = None
     db.commit()
     db.refresh(internship)
     return _serialize_internship(internship)
@@ -182,6 +182,7 @@ def update_certificate(
     if not internship:
         raise HTTPException(status_code=404, detail="Internship not found")
     internship.certificate_url = data.certificate_url
+    student.predictions = None
     db.commit()
     return {"certificate_url": internship.certificate_url, "message": "Certificate updated"}
 
@@ -199,6 +200,7 @@ def delete_internship(
     if not internship:
         raise HTTPException(status_code=404, detail="Internship not found")
     db.delete(internship)
+    student.predictions = None
     db.commit()
     return {"message": "Internship deleted"}
 
@@ -224,6 +226,7 @@ def add_project(
         raise HTTPException(status_code=404, detail="Complete onboarding first")
     project = Project(**data.dict(), student_id=student.id)
     db.add(project)
+    student.predictions = None
     db.commit()
     db.refresh(project)
     return _serialize_project(project)
@@ -253,6 +256,7 @@ def update_project(
     if data.certificate_url:
         project.certificate_url = data.certificate_url
         
+    student.predictions = None
     db.commit()
     db.refresh(project)
     return _serialize_project(project)
@@ -272,6 +276,7 @@ def update_thumbnail(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     project.thumbnail_url = data.thumbnail_url
+    student.predictions = None
     db.commit()
     return {"thumbnail_url": project.thumbnail_url, "message": "Thumbnail updated"}
 
@@ -289,5 +294,6 @@ def delete_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     db.delete(project)
+    student.predictions = None
     db.commit()
     return {"message": "Project deleted"}

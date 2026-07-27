@@ -28,14 +28,14 @@ _arch = None
 
 def _load_assets():
     global _st_model, _best_model, _le, _best_name, _arch
-    if _st_model is not None:
+    if _st_model is not None and _best_model is not None:
         return
 
     from sentence_transformers import SentenceTransformer
 
     embed_name = (MODEL_DIR / "embedding_model.txt").read_text().strip()
     _best_name = (MODEL_DIR / "best_model_name.txt").read_text().strip()
-    _st_model = SentenceTransformer(embed_name)
+    _st_model = SentenceTransformer(embed_name, device="cpu")
 
     with open(MODEL_DIR / "label_encoder.pkl", "rb") as f:
         _le = pickle.load(f)
@@ -61,7 +61,8 @@ def _load_assets():
                 return self.net(x)
 
         m = CareerMLP(_arch["input_dim"], _arch["num_classes"])
-        m.load_state_dict(torch.load(MODEL_DIR / "nn_best.pt", map_location="cpu"))
+        # weights_only=False is required for PyTorch 2.x+ to load legacy checkpoint format
+        m.load_state_dict(torch.load(MODEL_DIR / "nn_best.pt", map_location="cpu", weights_only=False))
         m.eval()
         _best_model = m
     else:

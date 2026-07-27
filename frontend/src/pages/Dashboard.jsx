@@ -1,122 +1,92 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
-import PrimaryRoleCard from '../components/PrimaryRoleCard';
-import PredictionCards from '../components/PredictionCards';
-import SkillRadarChart from '../components/SkillRadarChart';
 import InsightBanner from '../components/InsightBanner';
 
 export default function Dashboard() {
-  const [data, setData] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [testLoading, setTestLoading] = useState(false);
   const [error, setError] = useState('');
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  const fetchPredictions = async () => {
-    setLoading(true); setError('');
+  const fetchProfile = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      const { data: res } = await api.get('/api/predict');
-      setData(res);
+      const { data } = await api.get('/api/students/profile');
+      setProfile(data);
     } catch (err) {
       if (err.response?.status === 404) {
         navigate('/onboarding');
       } else {
-        setError(err.response?.data?.detail || 'Failed to load predictions.');
+        setError(err.response?.data?.detail || 'Failed to load profile.');
       }
-    } finally { setLoading(false); }
-  };
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate]);
 
-  useEffect(() => { fetchPredictions(); }, []);
-
-  // Test profile uses the LOGGED-IN user's real name so it never overwrites with "Test Student"
-  const runTestProfile = async () => {
-    setTestLoading(true); setError('');
-    try {
-      const testPayload = {
-        name: user?.name || 'Student',          // ← real user name, never hardcoded
-        branch: 'CSE', cgpa: 8.5, semester: 7,
-        college_tier: 'Tier 2', backlog_count: 0,
-        skills: ['python', 'tensorflow', 'sql', 'numpy', 'scikit-learn', 'pytorch'],
-        certifications: ['Google ML Crash Course'],
-        projects_count: 5, internship_count: 1,
-        internship_domain: 'ML-AI', career_interest: 'AI_ML',
-        work_style_pref: 'Startup', communication_rating: 4,
-      };
-      await api.post('/api/students/profile', testPayload);
-      const { data: res } = await api.get('/api/predict');
-      setData(res);
-    } catch (err) {
-      setError('Test profile failed: ' + (err.response?.data?.detail || err.message));
-    } finally { setTestLoading(false); }
-  };
-
-  const handleLogout = () => { logout(); navigate('/login'); };
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   if (loading) {
     return (
       <div className="loading-page">
         <div className="spinner" />
-        <div className="loading-text">Analysing your profile…</div>
+        <div className="loading-text">Loading dashboard...</div>
       </div>
     );
   }
 
   return (
-    <div className="dashboard-page">
-      <nav className="dashboard-nav">
-        <div className="nav-logo">🧠 MirrorMind</div>
-        <div className="nav-right">
-          <span className="nav-user">{user?.name || user?.email}</span>
-          <button
-            id="dev-mode-btn"
-            className="btn btn-ghost btn-sm dev-btn"
-            onClick={() => navigate('/developer')}
-          >
-            ⚡ Developer Mode
-          </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/onboarding')}>Edit Profile</button>
-          <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Logout</button>
-        </div>
-      </nav>
-
+    <div className="dashboard-page" style={{ paddingBottom: '100px' }}>
       <div className="dashboard-hero">
         <div className="hero-info">
           <div>
-            {/* name / branch / cgpa come ONLY from API response (MongoDB student doc) */}
-            <div className="hero-name">{data?.name || '—'}</div>
+            <div className="hero-name">Welcome, {profile?.name || user?.name || 'Student'}!</div>
             <div className="hero-meta">
-              {data?.branch && <span className="hero-badge">📚 {data.branch}</span>}
-              {data?.cgpa > 0 && <span className="hero-badge">🎓 CGPA {data.cgpa}</span>}
-              <span className="hero-badge">
-                {data?.predictions?.[0]?.label ? `🏆 ${data.predictions[0].label}` : '🔮 Predictions Ready'}
-              </span>
+              <span className="hero-badge">🎓 {profile?.branch || 'N/A'} · Sem {profile?.semester || 'N/A'}</span>
+              <span className="hero-badge">📊 CGPA: {profile?.cgpa || '—'}</span>
             </div>
           </div>
-          <button
-            id="test-profile-btn"
-            className="btn btn-secondary btn-sm"
-            onClick={runTestProfile}
-            disabled={testLoading}
-          >
-            {testLoading ? '⏳ Loading…' : '🧪 Test Profile'}
-          </button>
         </div>
       </div>
 
       <div className="dashboard-body">
         {error && <div className="alert alert-error" style={{ marginBottom: 24 }}>{error}</div>}
-        <InsightBanner insight={data?.top_insight} />
-        <div className="dashboard-grid-top">
-          <PrimaryRoleCard prediction={data?.predictions?.[0]} />
-          <div className="card">
-            <PredictionCards predictions={data?.predictions} />
+
+        {/* Quick Stats Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
+          <div className="card" style={{ textAlign: 'center', padding: '20px 12px' }}>
+            <div style={{ fontSize: 36, fontWeight: 800 }}>{profile?.projects_count ?? (profile?.projects?.length ?? 0)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600 }}>Projects</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center', padding: '20px 12px' }}>
+            <div style={{ fontSize: 36, fontWeight: 800 }}>{profile?.internship_count ?? (profile?.internships?.length ?? 0)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600 }}>Internships</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center', padding: '20px 12px' }}>
+            <div style={{ fontSize: 36, fontWeight: 800 }}>{profile?.skills?.length ?? 0}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600 }}>Skills</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center', padding: '20px 12px' }}>
+            <div style={{ fontSize: 36, fontWeight: 800 }}>{profile?.cgpa ?? '—'}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600 }}>CGPA</div>
           </div>
         </div>
-        <div style={{ marginBottom: 24 }}>
-          <SkillRadarChart skillRadar={data?.skill_radar} />
+
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔮</div>
+          <h2 style={{ marginBottom: 8 }}>Your AI Career Predictions</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            Our ML model analyses your skills, CGPA, projects, and internships to predict the best career paths for you.
+          </p>
+          <button className="btn btn-primary" style={{ width: 'auto' }} onClick={() => navigate('/predict')}>
+            View Predictions ✨
+          </button>
         </div>
       </div>
     </div>

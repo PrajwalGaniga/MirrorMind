@@ -607,3 +607,164 @@ a:hover { transform: scale(0.98); }
   .radio-group { grid-template-columns: 1fr; }
   .review-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Bottom Navigation ──────────────────────────────────────────────────────── */
+.bottom-nav-container {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  padding: 0 16px 20px 16px;
+  z-index: 100;
+  pointer-events: none; /* Let clicks pass through container */
+}
+
+.bottom-nav {
+  pointer-events: auto; /* Re-enable clicks on the nav itself */
+  margin: 0 auto;
+  max-width: 600px;
+  height: 72px;
+  background: var(--bg-card);
+  border-radius: 22px;
+  border: var(--border-thick);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.bottom-nav-item {
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  color: var(--border-subtle);
+}
+
+.bottom-nav-item:hover {
+  transform: translateY(-2px);
+}
+
+.bottom-nav-item.active {
+  background: var(--accent-primary);
+  border-color: var(--border-subtle);
+}
+
+.bottom-nav-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.bottom-nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--border-subtle);
+}
+
+/* ── Developer Console ──────────────────────────────────────────────────────── */
+.dev-console-overlay {
+  position: fixed;
+  width: 400px;
+  max-width: 90vw;
+  height: 300px;
+  background: var(--bg-card);
+  border: var(--border-thick);
+  border-radius: var(--radius-md);
+  box-shadow: 4px 6px 0px rgba(0,0,0,0.2);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dev-console-header {
+  background: var(--bg-primary);
+  border-bottom: 2px solid #000;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.dev-console-title {
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.dev-console-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dev-console-btn {
+  background: #FFF;
+  border: 2px solid #000;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+}
+.dev-console-btn:hover { background: var(--bg-secondary); }
+
+.dev-console-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: #111;
+  color: #FFF;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+}
+
+.dev-console-log {
+  margin-bottom: 12px;
+  border-bottom: 1px dashed #333;
+  padding-bottom: 8px;
+}
+
+.dev-console-log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dev-console-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #000;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.dev-console-time {
+  color: #888;
+  font-size: 10px;
+}
+
+.dev-console-msg {
+  font-weight: bold;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+}
+
+.dev-console-data {
+  background: #000;
+  padding: 6px;
+  border-radius: 4px;
+  overflow-x: auto;
+  color: #0F0;
+  margin: 0;
+  white-space: pre-wrap;
+}
