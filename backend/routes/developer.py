@@ -2,6 +2,7 @@ import math
 import numpy as np
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+# pyrefly: ignore [missing-import]
 from bson import ObjectId
 from db import get_db
 from models.db_models import Student

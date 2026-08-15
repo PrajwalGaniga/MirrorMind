@@ -1,186 +1,122 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, JSON, Boolean
-from sqlalchemy.orm import relationship
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Optional, Any
 from datetime import datetime
 import uuid
-from db import Base
 
 def generate_uuid():
     return str(uuid.uuid4())
 
-class User(Base):
-    __tablename__ = "users"
+class ExtensionAPIKey(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    user_id: str
+    key_prefix: str
+    key_hash: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_used_at: Optional[datetime] = None
+    revoked: bool = False
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)
-    avatar_url = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+class User(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    name: str
+    email: str
+    password: str
+    avatar_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # The extension api key and prediction cache can be referenced or queried separately.
+    # In our Mongo plan, extension_api_key is embedded in User.
+    extension_api_key: Optional[ExtensionAPIKey] = None
 
-    student_profile = relationship("Student", back_populates="user", uselist=False)
-    extension_api_key = relationship("ExtensionAPIKey", back_populates="user", uselist=False)
-    prediction_cache = relationship("PredictionCache", back_populates="user", uselist=False)
+class Internship(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    company_name: str
+    domain: str
+    role: str
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    is_current: int = 0
+    certificate_url: Optional[str] = None
+    description: Optional[str] = None
 
-class ExtensionAPIKey(Base):
-    __tablename__ = "extension_api_keys"
+class Project(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    title: str
+    description: str
+    github_url: Optional[str] = None
+    live_demo_url: Optional[str] = None
+    tech_stack: List[str] = Field(default_factory=list)
+    thumbnail_url: Optional[str] = None
+    certificate_url: Optional[str] = None
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    user_id = Column(String, ForeignKey("users.id"), unique=True, index=True, nullable=False)
-    key_prefix = Column(String, nullable=False)
-    key_hash = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_used_at = Column(DateTime, nullable=True)
-    revoked = Column(Boolean, default=False)
+class SubjectMark(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    subject_name: str
+    marks_obtained: float
+    max_marks: float
+    grade: Optional[str] = None
 
-    user = relationship("User", back_populates="extension_api_key")
+class SemesterRecord(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    semester: int
+    sgpa: float
+    credits_earned: int
+    subjects: List[SubjectMark] = Field(default_factory=list)
 
+class PredictionCache(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    predictions: Any
+    skill_radar: Optional[Any] = None
+    top_insight: Optional[str] = None
+    cgpa: Optional[float] = None
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
 
-class Skill(Base):
-    __tablename__ = "skills"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    name = Column(String, unique=True, index=True, nullable=False)
-
-
-class Internship(Base):
-    __tablename__ = "internships"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    student_id = Column(String, ForeignKey("students.id"), index=True, nullable=False)
-    company_name = Column(String, nullable=False)
-    domain = Column(String, nullable=False)
-    role = Column(String, nullable=False)
-    start_date = Column(DateTime, nullable=False)
-    end_date = Column(DateTime, nullable=True)
-    is_current = Column(Integer, default=0)
-    certificate_url = Column(String, nullable=True)
-    description = Column(String, nullable=True)
-
-    student = relationship("Student", back_populates="internships")
-
-
-class Project(Base):
-    __tablename__ = "projects"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    student_id = Column(String, ForeignKey("students.id"), index=True, nullable=False)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=False)
-    github_url = Column(String, nullable=True)
-    live_demo_url = Column(String, nullable=True)
-    tech_stack = Column(JSON, default=[])
-    thumbnail_url = Column(String, nullable=True)
-    certificate_url = Column(String, nullable=True)
-
-    student = relationship("Student", back_populates="projects")
-
-
-class SemesterRecord(Base):
-    __tablename__ = "semester_records"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    student_id = Column(String, ForeignKey("students.id"), index=True, nullable=False)
-    semester = Column(Integer, nullable=False)
-    sgpa = Column(Float, nullable=False)
-    credits_earned = Column(Integer, nullable=False)
-
-    student = relationship("Student", back_populates="semester_records")
-    subjects = relationship("SubjectMark", back_populates="semester_record")
-
-
-class SubjectMark(Base):
-    __tablename__ = "subject_marks"
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    semester_record_id = Column(String, ForeignKey("semester_records.id"), index=True, nullable=False)
-    subject_name = Column(String, nullable=False)
-    marks_obtained = Column(Float, nullable=False)
-    max_marks = Column(Float, nullable=False)
-    grade = Column(String, nullable=True)
-
-    semester_record = relationship("SemesterRecord", back_populates="subjects")
-
-
-class Student(Base):
-    __tablename__ = "students"
-
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    user_id = Column(String, ForeignKey("users.id"), unique=True, index=True)
-    name = Column(String, nullable=False)
-    branch = Column(String, nullable=False)
-    semester = Column(Integer, nullable=False)
-    college_tier = Column(String, nullable=False)
-    cgpa = Column(Float, nullable=False, default=0.0)
-    backlog_count = Column(Integer, nullable=False)
-    skills = Column(JSON, default=[])
-    certifications = Column(JSON, default=[])
-    career_interest = Column(String, nullable=False)
-    communication_rating = Column(Integer, nullable=False)
-    work_style_pref = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    predictions = Column(JSON, nullable=True)
-
-    user = relationship("User", back_populates="student_profile")
-    internships = relationship("Internship", back_populates="student")
-    projects = relationship("Project", back_populates="student")
-    semester_records = relationship("SemesterRecord", back_populates="student")
-
-
-class PredictionCache(Base):
-    """Stores the last successfully computed ML predictions per user.
+class Student(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    user_id: str
+    name: str
+    branch: str
+    semester: int
+    college_tier: str
+    cgpa: float = 0.0
+    backlog_count: int
+    skills: List[str] = Field(default_factory=list)
+    certifications: List[Any] = Field(default_factory=list)
+    career_interest: str
+    communication_rating: int
+    work_style_pref: str
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    predictions: Optional[Any] = None
     
-    Acts as a permanent fallback — if ML fails, we return stale-but-valid data
-    rather than showing an error. Updated every time ML succeeds.
-    """
-    __tablename__ = "prediction_cache"
+    # Embedded data
+    internships: List[Internship] = Field(default_factory=list)
+    projects: List[Project] = Field(default_factory=list)
+    semester_records: List[SemesterRecord] = Field(default_factory=list)
 
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    user_id = Column(String, ForeignKey("users.id"), unique=True, index=True, nullable=False)
-    predictions = Column(JSON, nullable=False)
-    skill_radar = Column(JSON, nullable=True)
-    top_insight = Column(String, nullable=True)
-    cgpa = Column(Float, nullable=True)
-    computed_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+class Skill(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    name: str
 
-    user = relationship("User", back_populates="prediction_cache")
+class ExtensionActivityLog(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    user_id: str
+    event_type: str
+    file_path: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-
-class ExtensionActivityLog(Base):
-    """Records activity events fired from the VS Code extension (e.g. file saves)."""
-    __tablename__ = "extension_activity_log"
-
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
-    event_type = Column(String, nullable=False)   # e.g. 'file_saved'
-    file_path = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    user = relationship("User", backref="activity_logs")
-
-
-class ErrorLog(Base):
-    """Stores VS Code diagnostic errors captured on file save, one row per unique fingerprint per user."""
-    __tablename__ = "error_logs"
-
-    id = Column(String, primary_key=True, default=generate_uuid, index=True)
-    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
-    file_path = Column(String, nullable=False)
-    error_message = Column(String, nullable=False)
-    line = Column(Integer, nullable=False)
-    source = Column(String, nullable=True)          # e.g. 'pylance', 'eslint'
-    error_code = Column(String, nullable=True)      # e.g. 'reportMissingImports'
-    fingerprint = Column(String, index=True, nullable=False)  # SHA-256 of file:line:message
-    hint = Column(String, nullable=True)
-    corrected_block = Column(String, nullable=True)
-    explanation = Column(String, nullable=True)
-    gemini_fetched_at = Column(DateTime, nullable=True)
-    code_context = Column(String, nullable=True)
-    resolved_via = Column(String, nullable=True)    # 'hint' | 'full_fix' | 'unresolved'
-    resolved_at = Column(DateTime, nullable=True)
-    hidden_by_user = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    user = relationship("User", backref="error_logs")
-
-
-
+class ErrorLog(BaseModel):
+    id: str = Field(default_factory=generate_uuid)
+    user_id: str
+    file_path: str
+    error_message: str
+    line: int
+    source: Optional[str] = None
+    error_code: Optional[str] = None
+    fingerprint: str
+    hint: Optional[str] = None
+    corrected_block: Optional[str] = None
+    explanation: Optional[str] = None
+    gemini_fetched_at: Optional[datetime] = None
+    code_context: Optional[str] = None
+    resolved_via: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    hidden_by_user: bool = False
+    created_at: datetime = Field(default_factory=datetime.utcnow)

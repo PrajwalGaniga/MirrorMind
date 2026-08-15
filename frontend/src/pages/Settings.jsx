@@ -27,13 +27,17 @@ export default function Settings() {
   };
 
   const generateKey = async (isRegenerate = false) => {
+    let password = null;
     if (isRegenerate) {
       if (!window.confirm("This will invalidate your current key. Are you sure?")) return;
+      password = window.prompt("Please enter your password to regenerate the key:");
+      if (!password) return;
     }
     setLoading(true);
     try {
       const endpoint = isRegenerate ? '/api/settings/api-key/regenerate' : '/api/settings/api-key';
-      const res = await api.post(endpoint);
+      const payload = isRegenerate ? { password } : undefined;
+      const res = await api.post(endpoint, payload);
       setNewKey(res.data.raw_key);
       fetchKeyInfo();
     } catch (err) {
@@ -111,22 +115,22 @@ export default function Settings() {
               <div style={{ padding: 16, backgroundColor: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--primary)', borderRadius: 8, marginBottom: 16 }}>
                 <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: 4 }}>ℹ️ Security Notice</div>
                 <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-                  Your full API key is permanently hidden to protect your account. If you lost it or need to verify it, please regenerate a new one below.
+                  Your full API key is securely hidden. You can copy it, but it will not be displayed.
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <strong>Prefix:</strong> 
+                  <strong>Extension ID:</strong> 
                   <code style={{ padding: '4px 8px', backgroundColor: 'var(--bg-secondary)', borderRadius: 4 }}>
-                    {keyInfo.key_prefix}********
+                    *******
                   </code>
                   <button 
                     className="btn btn-secondary btn-sm" 
                     style={{ padding: '4px 8px', fontSize: 12, width: 'auto' }}
                     onClick={() => navigator.clipboard.writeText(keyInfo.key_prefix)}
-                    title="Copy Prefix"
+                    title="Copy Extension ID"
                   >
-                    Copy Prefix
+                    Copy Extension ID
                   </button>
                 </div>
                 <div><strong>Created:</strong> {new Date(keyInfo.created_at).toLocaleString()}</div>

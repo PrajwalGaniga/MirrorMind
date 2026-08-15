@@ -1,10 +1,8 @@
 import asyncio
 import logging
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
 from db import get_db
 from auth_utils import get_current_user
-from models.db_models import Student, PredictionCache
 from inference.predictor import predict_career, USE_MOCK, MOCK_PREDICTIONS
 
 logger = logging.getLogger(__name__)
@@ -32,7 +30,6 @@ ROLE_LABELS = {
     "RESEARCH":        "Research Engineer",
     "PRODUCT_MANAGER": "Product Manager",
 }
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -82,40 +79,33 @@ def _run_ml(skills, cgpa, projects, internships) -> list:
     ]
 
 
-def _persist_cache(db: Session, user_id: str, predictions: list,
+async def _persist_cache(db, user_id: str, predictions: list,
                    skill_radar: dict, top_insight: str, cgpa: float):
-    """Upsert the prediction_cache row for this user."""
     from datetime import datetime
-    cache = db.query(PredictionCache).filter_by(user_id=user_id).first()
-    if cache:
-        cache.predictions = predictions
-        cache.skill_radar = skill_radar
-        cache.top_insight = top_insight
-        cache.cgpa = cgpa
-        cache.computed_at = datetime.utcnow()
-    else:
-        cache = PredictionCache(
-            user_id=user_id,
-            predictions=predictions,
-            skill_radar=skill_radar,
-            top_insight=top_insight,
-            cgpa=cgpa,
-        )
-        db.add(cache)
-    db.commit()
+    update_doc = {
+        "predictions": predictions,
+        "skill_radar": skill_radar,
+        "top_insight": top_insight,
+        "cgpa": cgpa,
+        "computed_at": datetime.utcnow()
+    }
+    await db.prediction_cache.update_one(
+        {"user_id": user_id},
+        {"$set": update_doc},
+        upsert=True
+    )
 
 
-def _build_response(student: Student, predictions: list, skill_radar: dict,
+def _build_response(student_dict: dict, predictions: list, skill_radar: dict,
                     top_insight: str, cgpa: float, from_cache: bool) -> dict:
     return {
-        "student_id": student.id,
-        "name":       student.name or "",
-        "branch":     student.branch or "",
+        "student_id": student_dict.get("id"),
+        "name":       student_dict.get("name", ""),
+        "branch":     student_dict.get("branch", ""),
         "cgpa":       cgpa,
         "predictions": predictions,
         "skill_radar": skill_radar,
         "top_insight": top_insight,
-        # UI can show a subtle "using last saved" badge when from_cache=True and ml_failed=True
         "from_cache":  from_cache,
         "ml_failed":   False,
     }
@@ -124,28 +114,29 @@ def _build_response(student: Student, predictions: list, skill_radar: dict,
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/predict")
-async def predict(user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
-    student = db.query(Student).filter_by(user_id=user_id).first()
+async def predict(user_id: str = Depends(get_current_user), db = Depends(get_db), force: bool = False):
+    student = await db.students.find_one({"user_id": user_id})
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found. Please complete onboarding first.")
 
-    skills = student.skills or []
-    projects = len(student.projects)
-    internships = len(student.internships)
+    skills = student.get("skills") or []
+    projects = len(student.get("projects", []))
+    internships = len(student.get("internships", []))
+    
+    semester_records = student.get("semester_records", [])
 
-    # Prefer semester-record derived CGPA; fall back to stored field
-    if student.semester_records:
-        total_credits = sum(r.credits_earned for r in student.semester_records)
-        cgpa = float(sum(r.sgpa * r.credits_earned for r in student.semester_records) / total_credits) if total_credits > 0 else 0.0
+    if semester_records:
+        total_credits = sum(r.get("credits_earned", 0) for r in semester_records)
+        cgpa = float(sum(r.get("sgpa", 0.0) * r.get("credits_earned", 0) for r in semester_records) / total_credits) if total_credits > 0 else 0.0
     else:
-        cgpa = float(student.cgpa or 0.0)
+        cgpa = float(student.get("cgpa", 0.0))
 
     skill_radar = _compute_radar(skills, cgpa, projects, internships)
 
-    # ── 1. Serve from student.predictions (hot in-memory / DB cache) ──────────
-    if student.predictions:
-        top_insight = _build_insight(student.predictions, skills)
-        return _build_response(student, student.predictions, skill_radar, top_insight, cgpa, from_cache=False)
+    # ── 1. Serve from student.predictions ONLY if not forced ──────────────────
+    if not force and student.get("predictions"):
+        top_insight = _build_insight(student["predictions"], skills)
+        return _build_response(student, student["predictions"], skill_radar, top_insight, cgpa, from_cache=True)
 
     # ── 2. Run ML model in a thread — non-blocking ────────────────────────────
     ml_failed = False
@@ -163,10 +154,9 @@ async def predict(user_id: str = Depends(get_current_user), db: Session = Depend
             logger.info(f"[predict] ML success for user {user_id[:8]}")
 
         # Save to both student.predictions (fast lookup) and prediction_cache (permanent fallback)
-        student.predictions = predictions
-        db.commit()
+        await db.students.update_one({"user_id": user_id}, {"$set": {"predictions": predictions}})
         top_insight = _build_insight(predictions, skills)
-        _persist_cache(db, user_id, predictions, skill_radar, top_insight, cgpa)
+        await _persist_cache(db, user_id, predictions, skill_radar, top_insight, cgpa)
 
     except Exception as e:
         logger.error(f"[predict] ML FAILED for user {user_id[:8]}: {e}")
@@ -174,11 +164,11 @@ async def predict(user_id: str = Depends(get_current_user), db: Session = Depend
 
     # ── 3. ML failed — serve from prediction_cache (last known good) ──────────
     if ml_failed or predictions is None:
-        cache = db.query(PredictionCache).filter_by(user_id=user_id).first()
+        cache = await db.prediction_cache.find_one({"user_id": user_id})
         if cache:
             logger.info(f"[predict] Serving stale cache for user {user_id[:8]}")
-            resp = _build_response(student, cache.predictions, cache.skill_radar or skill_radar,
-                                   cache.top_insight or "Using last saved predictions.", cache.cgpa or cgpa,
+            resp = _build_response(student, cache.get("predictions", []), cache.get("skill_radar") or skill_radar,
+                                   cache.get("top_insight") or "Using last saved predictions.", cache.get("cgpa") or cgpa,
                                    from_cache=True)
             resp["ml_failed"] = True
             return resp
@@ -198,12 +188,20 @@ async def predict(user_id: str = Depends(get_current_user), db: Session = Depend
     return _build_response(student, predictions, skill_radar, top_insight, cgpa, from_cache=False)
 
 
+
 @router.post("/predict/refresh")
-async def refresh_predict(user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Force-clear cached predictions so next GET /predict re-runs ML."""
-    student = db.query(Student).filter_by(user_id=user_id).first()
+async def refresh_predict(user_id: str = Depends(get_current_user), db = Depends(get_db)):
+    """Force-clear ALL cached predictions so next GET /predict?force=true re-runs ML fresh."""
+    student = await db.students.find_one({"user_id": user_id})
     if not student:
         raise HTTPException(status_code=404, detail="Student profile not found.")
-    student.predictions = None
-    db.commit()
-    return {"message": "Prediction cache cleared. Call GET /api/predict to re-run the model."}
+
+    # Clear both the fast-lookup cache on student doc AND the prediction_cache collection
+    await db.students.update_one(
+        {"user_id": user_id},
+        {"$unset": {"predictions": ""}}
+    )
+    await db.prediction_cache.delete_one({"user_id": user_id})
+
+    return {"message": "All prediction caches cleared. Ready for fresh ML run."}
+

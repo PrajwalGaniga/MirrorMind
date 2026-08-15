@@ -1,16 +1,16 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-
-from db import Base, engine, get_db
+from db import get_db, setup_indexes
 import models.db_models
-from routes import auth, students, predict, developer, uploads, settings, extension
+from routes import auth, students, predict, developer, uploads, settings, extension, documents
 
-# Create all database tables
-Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(title="MirrorMind API", version="1.0.0")
+
+@app.on_event("startup")
+async def startup_event():
+    await setup_indexes()
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,15 +27,16 @@ app.include_router(developer.router, prefix="/api/developer", tags=["Developer"]
 app.include_router(uploads.router, prefix="/api/upload", tags=["Uploads"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(extension.router, prefix="/api/extension", tags=["Extension"])
+app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
 
 @app.get("/")
 def root():
     return {"status": "MirrorMind API running", "version": "1.0.0"}
 
 @app.get("/api/health/db")
-def health_db(db: Session = Depends(get_db)):
+async def health_db(db = Depends(get_db)):
     try:
-        db.execute(text("SELECT 1"))
+        await db.command("ping")
         return {"status": "Database connection successful"}
     except Exception as e:
         return {"status": "Database connection failed", "error": str(e)}

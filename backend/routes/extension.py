@@ -2,7 +2,6 @@ import os
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from google import genai
 
@@ -16,7 +15,7 @@ router = APIRouter()
 # ── Part A: verify-key ────────────────────────────────────────────────────────
 
 @router.post("/verify-key")
-def verify_key(
+async def verify_key(
     user_id: str = Depends(verify_extension_api_key),
 ):
     """
@@ -35,10 +34,10 @@ class ActivityPayload(BaseModel):
 
 
 @router.post("/activity", status_code=201)
-def log_activity(
+async def log_activity(
     payload: ActivityPayload,
     user_id: str = Depends(verify_extension_api_key),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     now = datetime.utcnow()
     log_entry = ExtensionActivityLog(
@@ -47,16 +46,17 @@ def log_activity(
         file_path=payload.file_path,
         created_at=now,
     )
-    db.add(log_entry)
-    db.commit()
-    db.refresh(log_entry)
+    
+    doc = log_entry.model_dump()
+    doc["_id"] = doc.pop("id")
+    await db.extension_activity_log.insert_one(doc)
 
     print(
         f"[EXTENSION ACTIVITY] user_id={user_id} event={payload.event_type} "
         f"file={payload.file_path} at={now.isoformat()}"
     )
 
-    return {"id": log_entry.id}
+    return {"id": doc["_id"]}
 
 
 # ── Error logging with fingerprint dedup ─────────────────────────────────────
@@ -73,24 +73,20 @@ class ErrorPayload(BaseModel):
 
 
 @router.post("/error", status_code=201)
-def log_error(
+async def log_error(
     payload: ErrorPayload,
     user_id: str = Depends(verify_extension_api_key),
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
 ):
     # Dedup check: same user + same fingerprint → skip insert
-    existing = (
-        db.query(ErrorLog)
-        .filter_by(user_id=user_id, fingerprint=payload.fingerprint)
-        .first()
-    )
+    existing = await db.error_logs.find_one({"user_id": user_id, "fingerprint": payload.fingerprint})
 
     if existing:
         print(
             f"[ERROR DEDUP] user_id={user_id} fingerprint={payload.fingerprint}"
             " — already logged, skipping"
         )
-        return {"id": existing.id, "duplicate": True, "hint": existing.hint}
+        return {"id": existing.get("_id"), "duplicate": True, "hint": existing.get("hint")}
 
     # New error — call Gemini
     hint = None
@@ -148,9 +144,10 @@ Respond with JSON only: {{"hint": "...", "explanation": "...", "corrected_block"
         code_context=payload.code_context,
         created_at=now,
     )
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
+    
+    doc = entry.model_dump()
+    doc["_id"] = doc.pop("id")
+    await db.error_logs.insert_one(doc)
 
     print(
         f'[NEW ERROR] user_id={user_id} file={payload.file_path} line={payload.line} '
@@ -158,94 +155,94 @@ Respond with JSON only: {{"hint": "...", "explanation": "...", "corrected_block"
         f'fingerprint={payload.fingerprint} gemini_called={gemini_fetched_at is not None}'
     )
 
-    return {"id": entry.id, "duplicate": False, "hint": hint}
+    return {"id": doc["_id"], "duplicate": False, "hint": hint}
 
 
 # ── Part B: Dashboard Fetch Endpoints ────────────────────────────────────────
 
 @router.get("/errors")
-def list_errors(
+async def list_errors(
     status: str = "active",
     user_id: str = Depends(get_current_user),
     limit: int = 20,
     offset: int = 0,
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
-    query = db.query(ErrorLog).filter(ErrorLog.user_id == user_id)
+    query = {"user_id": user_id}
     
     if status == "active":
-        query = query.filter(ErrorLog.resolved_via == None)
+        query["resolved_via"] = None
     elif status == "history":
         two_days_ago = datetime.utcnow() - timedelta(days=2)
-        query = query.filter(
-            ErrorLog.resolved_via != None,
-            ErrorLog.hidden_by_user == False,
-            ErrorLog.resolved_at > two_days_ago
-        )
+        query["resolved_via"] = {"$ne": None}
+        query["hidden_by_user"] = False
+        query["resolved_at"] = {"$gt": two_days_ago}
         
-    errors = query.order_by(ErrorLog.created_at.desc()).offset(offset).limit(limit).all()
+    cursor = db.error_logs.find(query).sort("created_at", -1).skip(offset).limit(limit)
+    errors = await cursor.to_list(length=limit)
     
     return [
         {
-            "id": err.id,
-            "file_path": err.file_path,
-            "error_message": err.error_message,
-            "line": err.line,
-            "source": err.source,
-            "hint": err.hint,
-            "resolved_via": err.resolved_via,
-            "created_at": err.created_at
+            "id": err.get("_id"),
+            "file_path": err.get("file_path"),
+            "error_message": err.get("error_message"),
+            "line": err.get("line"),
+            "source": err.get("source"),
+            "hint": err.get("hint"),
+            "resolved_via": err.get("resolved_via"),
+            "created_at": err.get("created_at")
         }
         for err in errors
     ]
 
 @router.get("/errors/{error_id}/reveal")
-def reveal_error(
+async def reveal_error(
     error_id: str,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
-    error = db.query(ErrorLog).filter(ErrorLog.id == error_id, ErrorLog.user_id == user_id).first()
+    error = await db.error_logs.find_one({"_id": error_id, "user_id": user_id})
     if not error:
         raise HTTPException(status_code=404, detail="Error log not found")
         
     return {
-        "corrected_block": error.corrected_block,
-        "explanation": error.explanation
+        "corrected_block": error.get("corrected_block"),
+        "explanation": error.get("explanation")
     }
 
 class ResolvePayload(BaseModel):
     resolved_via: str
 
 @router.patch("/errors/{error_id}/resolve")
-def resolve_error(
+async def resolve_error(
     error_id: str,
     payload: ResolvePayload,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
-    error = db.query(ErrorLog).filter(ErrorLog.id == error_id, ErrorLog.user_id == user_id).first()
-    if not error:
-        raise HTTPException(status_code=404, detail="Error log not found")
-        
     if payload.resolved_via not in ["hint", "full_fix"]:
         raise HTTPException(status_code=400, detail="Invalid resolved_via value")
         
-    error.resolved_via = payload.resolved_via
-    error.resolved_at = datetime.utcnow()
-    db.commit()
+    result = await db.error_logs.update_one(
+        {"_id": error_id, "user_id": user_id},
+        {"$set": {"resolved_via": payload.resolved_via, "resolved_at": datetime.utcnow()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Error log not found")
+
     return {"status": "ok"}
 
 @router.delete("/errors/{error_id}")
-def delete_error(
+async def delete_error(
     error_id: str,
     user_id: str = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
-    error = db.query(ErrorLog).filter(ErrorLog.id == error_id, ErrorLog.user_id == user_id).first()
-    if not error:
+    result = await db.error_logs.update_one(
+        {"_id": error_id, "user_id": user_id},
+        {"$set": {"hidden_by_user": True}}
+    )
+    if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Error log not found")
-        
-    error.hidden_by_user = True
-    db.commit()
+
     return {"status": "ok"}

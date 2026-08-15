@@ -96,3 +96,9 @@ Thumbs.db
 # VS Code Extension (WIP)
 # ----------------------------------------------------------------------
 vs_extension/
+
+# Ignored Uploads
+backend/uploads/
+
+*.pdf
+new_dataset/model_output/

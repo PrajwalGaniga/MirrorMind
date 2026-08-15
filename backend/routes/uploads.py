@@ -8,9 +8,9 @@ from auth_utils import get_current_user
 
 load_dotenv()
 
-CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "")
-CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "626445917944175")
-CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "ss5gnsii")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
 
 router = APIRouter()
 

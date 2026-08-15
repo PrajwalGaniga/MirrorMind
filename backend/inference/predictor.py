@@ -24,55 +24,58 @@ _best_model = None
 _le = None
 _best_name = None
 _arch = None
+import threading
+_load_lock = threading.Lock()
 
 
 def _load_assets():
     global _st_model, _best_model, _le, _best_name, _arch
-    if _st_model is not None and _best_model is not None:
-        return
+    with _load_lock:
+        if _st_model is not None and _best_model is not None:
+            return
 
-    from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer
 
-    embed_name = (MODEL_DIR / "embedding_model.txt").read_text().strip()
-    _best_name = (MODEL_DIR / "best_model_name.txt").read_text().strip()
-    _st_model = SentenceTransformer(embed_name, device="cpu")
+        embed_name = (MODEL_DIR / "embedding_model.txt").read_text().strip()
+        _best_name = (MODEL_DIR / "best_model_name.txt").read_text().strip()
+        _st_model = SentenceTransformer(embed_name, device="cpu")
 
-    with open(MODEL_DIR / "label_encoder.pkl", "rb") as f:
-        _le = pickle.load(f)
+        with open(MODEL_DIR / "label_encoder.pkl", "rb") as f:
+            _le = pickle.load(f)
 
-    if _best_name == "NeuralNet":
-        import torch
-        import torch.nn as nn
+        if _best_name == "NeuralNet":
+            import torch
+            import torch.nn as nn
 
-        with open(MODEL_DIR / "nn_arch.json") as f:
-            _arch = json.load(f)
+            with open(MODEL_DIR / "nn_arch.json") as f:
+                _arch = json.load(f)
 
-        class CareerMLP(nn.Module):
-            def __init__(self, input_dim, num_classes, dropout=0.35):
-                super().__init__()
-                self.net = nn.Sequential(
-                    nn.Linear(input_dim, 512), nn.BatchNorm1d(512), nn.GELU(), nn.Dropout(dropout),
-                    nn.Linear(512, 256),       nn.BatchNorm1d(256), nn.GELU(), nn.Dropout(dropout),
-                    nn.Linear(256, 128),       nn.BatchNorm1d(128), nn.GELU(), nn.Dropout(dropout * 0.7),
-                    nn.Linear(128, num_classes)
-                )
+            class CareerMLP(nn.Module):
+                def __init__(self, input_dim, num_classes, dropout=0.35):
+                    super().__init__()
+                    self.net = nn.Sequential(
+                        nn.Linear(input_dim, 512), nn.BatchNorm1d(512), nn.GELU(), nn.Dropout(dropout),
+                        nn.Linear(512, 256),       nn.BatchNorm1d(256), nn.GELU(), nn.Dropout(dropout),
+                        nn.Linear(256, 128),       nn.BatchNorm1d(128), nn.GELU(), nn.Dropout(dropout * 0.7),
+                        nn.Linear(128, num_classes)
+                    )
 
-            def forward(self, x):
-                return self.net(x)
+                def forward(self, x):
+                    return self.net(x)
 
-        m = CareerMLP(_arch["input_dim"], _arch["num_classes"])
-        # weights_only=False is required for PyTorch 2.x+ to load legacy checkpoint format
-        m.load_state_dict(torch.load(MODEL_DIR / "nn_best.pt", map_location="cpu", weights_only=False))
-        m.eval()
-        _best_model = m
-    else:
-        fname = {
-            "LogReg":   "logistic_regression.pkl",
-            "XGBoost":  "xgboost_model.pkl",
-            "LightGBM": "lightgbm_model.pkl",
-        }[_best_name]
-        with open(MODEL_DIR / fname, "rb") as f:
-            _best_model = pickle.load(f)
+            m = CareerMLP(_arch["input_dim"], _arch["num_classes"])
+            # weights_only=False is required for PyTorch 2.x+ to load legacy checkpoint format
+            m.load_state_dict(torch.load(MODEL_DIR / "nn_best.pt", map_location="cpu", weights_only=False, mmap=False))
+            m.eval()
+            _best_model = m
+        else:
+            fname = {
+                "LogReg":   "logistic_regression.pkl",
+                "XGBoost":  "xgboost_model.pkl",
+                "LightGBM": "lightgbm_model.pkl",
+            }[_best_name]
+            with open(MODEL_DIR / fname, "rb") as f:
+                _best_model = pickle.load(f)
 
 
 # ── Text builder ───────────────────────────────────────────────────────────────

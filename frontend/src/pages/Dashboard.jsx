@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import InsightBanner from '../components/InsightBanner';
+import Documents from '../components/Documents';
 
 export default function Dashboard() {
   const [profile, setProfile] = useState(null);
@@ -88,6 +89,8 @@ export default function Dashboard() {
             View Predictions ✨
           </button>
         </div>
+
+        <Documents />
       </div>
     </div>
   );

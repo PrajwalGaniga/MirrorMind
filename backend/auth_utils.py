@@ -1,9 +1,7 @@
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status, Header
-from sqlalchemy.orm import Session
 from db import get_db
-from models.db_models import ExtensionAPIKey
 import hashlib
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -11,7 +9,7 @@ import os
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "mirrormind_secret_key_demo")
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 10080))
 
@@ -48,9 +46,9 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_
     return user_id
 
 
-def verify_extension_api_key(
+async def verify_extension_api_key(
     x_extension_key: str = Header(None, alias="X-Extension-Key"),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ) -> str:
     if not x_extension_key:
         raise HTTPException(
@@ -58,14 +56,17 @@ def verify_extension_api_key(
             detail="API Key missing",
         )
     key_hash = hashlib.sha256(x_extension_key.encode()).hexdigest()
-    api_key = db.query(ExtensionAPIKey).filter_by(key_hash=key_hash, revoked=False).first()
-    if not api_key:
+    
+    user = await db.users.find_one({"extension_api_key.key_hash": key_hash, "extension_api_key.revoked": False})
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked API Key",
         )
     
-    api_key.last_used_at = datetime.utcnow()
-    db.commit()
+    await db.users.update_one(
+        {"_id": user["_id"]}, 
+        {"$set": {"extension_api_key.last_used_at": datetime.utcnow()}}
+    )
     
-    return api_key.user_id
+    return user["_id"]

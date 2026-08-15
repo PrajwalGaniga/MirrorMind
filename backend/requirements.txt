@@ -1,8 +1,5 @@
 fastapi
 uvicorn
-sqlalchemy==2.0.28
-psycopg2-binary==2.9.9
-alembic==1.13.1
 python-jose[cryptography]
 python-dotenv
 sentence-transformers==2.7.0
@@ -12,5 +9,10 @@ scikit-learn
 xgboost
 lightgbm
 pymongo
+motor
 cloudinary
 google-genai
+bcrypt==4.0.1
+python-multipart
+pypdf
+httpx
