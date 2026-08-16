@@ -86,9 +86,21 @@ export default function Documents() {
 
   const handleProcess = async (docId) => {
     try {
+      // 1. Start Processing
       setDocuments(docs => docs.map(doc => doc._id === docId ? { ...doc, processing_status: 'processing' } : doc));
       await api.post(`/api/documents/${docId}/process`);
-      fetchDocuments();
+      
+      // Fetch intermediate state so UI updates
+      const { data: updatedDocs } = await api.get('/api/documents');
+      setDocuments(updatedDocs);
+      
+      // 2. Start Embedding if processing was successful
+      const processedDoc = updatedDocs.find(d => d._id === docId);
+      if (processedDoc && processedDoc.processing_status === 'processed') {
+          setDocuments(docs => docs.map(doc => doc._id === docId ? { ...doc, embedding_status: 'embedding' } : doc));
+          await api.post(`/api/documents/${docId}/embed`);
+          fetchDocuments();
+      }
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to process document.');
       fetchDocuments();
@@ -175,10 +187,32 @@ export default function Documents() {
                   
                   <div style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <strong>Status:</strong>
-                    {doc.processing_status === 'uploaded' && <span>Uploaded. Not processed yet.</span>}
-                    {doc.processing_status === 'processing' && <span style={{ color: 'var(--primary-color)' }}>Extracting text...</span>}
-                    {doc.processing_status === 'processed' && <span style={{ color: 'green' }}>Processed successfully ({doc.page_count} pages, {doc.chunk_count} chunks)</span>}
-                    {doc.processing_status === 'failed' && <span style={{ color: 'red' }}>Text could not be extracted.</span>}
+                    {doc.processing_status === 'uploaded' && <span>Uploaded to Cloudinary. Not processed yet.</span>}
+                    {doc.processing_status === 'processing' && (
+                      <span style={{ color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                        Extracting text...
+                      </span>
+                    )}
+                    {doc.processing_status === 'failed' && <span style={{ color: 'red' }}>Document processing failed.</span>}
+                    
+                    {doc.processing_status === 'processed' && (
+                      <>
+                        {!doc.embedding_status && <span style={{ color: 'orange' }}>Text extracted. Embedding pending.</span>}
+                        {doc.embedding_status === 'embedding' && (
+                          <span style={{ color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                            Generating semantic embeddings...
+                          </span>
+                        )}
+                        {doc.embedding_status === 'embedded' && (
+                          <span style={{ color: 'green', fontWeight: 'bold' }}>✓ Ready for MirrorMind</span>
+                        )}
+                        {doc.embedding_status === 'failed' && (
+                          <span style={{ color: 'red' }}>Document processed, but semantic indexing failed.</span>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
                 
@@ -202,13 +236,14 @@ export default function Documents() {
                     </button>
                   </div>
                   
-                  {(doc.processing_status === 'uploaded' || doc.processing_status === 'failed') && (
+                  {(doc.processing_status === 'uploaded' || doc.processing_status === 'failed' || doc.embedding_status === 'failed') && (
                     <button 
                       className="btn btn-primary"
                       style={{ padding: '6px 12px', fontSize: '12px' }}
                       onClick={() => handleProcess(doc._id)}
+                      disabled={doc.processing_status === 'processing' || doc.embedding_status === 'embedding'}
                     >
-                      {doc.processing_status === 'failed' ? 'Retry Process' : 'Process Document'}
+                      {(doc.processing_status === 'failed' || doc.embedding_status === 'failed') ? 'Retry Process' : 'Process Document'}
                     </button>
                   )}
                   {doc.processing_status === 'processed' && (

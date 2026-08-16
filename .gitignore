@@ -7,6 +7,10 @@
 .env.development
 .env.test
 .env.production
+backend/.env
+frontend/.env
+backend/vector_indexes/
+vector_indexes/
 credentials.json
 client_secret.json
 *.pem

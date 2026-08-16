@@ -16,3 +16,6 @@ bcrypt==4.0.1
 python-multipart
 pypdf
 httpx
+faiss-cpu
+transformers
+piper-tts

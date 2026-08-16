@@ -30,6 +30,8 @@ class DocumentResponse(BaseModel):
     file_type: str
     file_size: int
     processing_status: str
+    embedding_status: Optional[str] = None
+    embedding_error: Optional[str] = None
     uploaded_at: str
     
     class Config:
@@ -105,6 +107,8 @@ async def upload_document(
         with open(local_path, "wb") as f:
             f.write(content)
             
+        print(f"[MIRRORMIND][DOCUMENT]\nDocument uploaded\ndocument_id={document_data['_id']}\nuser_id={user_id}\nfilename={original_filename}\n")
+            
         return document_data
     except Exception as e:
         # Revert cloudinary upload if db insert fails
@@ -167,6 +171,21 @@ async def delete_document(document_id: str, user_id: str = Depends(get_current_u
         
     # Delete associated chunks
     await db.document_chunks.delete_many({"document_id": document_id, "user_id": user_id})
+    
+    # Delete vectors from VectorStore
+    try:
+        from services.embedding_service import get_embedding_service
+        from services.vector_store import VectorStore
+        es = get_embedding_service()
+        vs = VectorStore(user_id, es.get_dimension())
+        vs.remove_document_vectors(document_id)
+        # Update vector_indexes metadata
+        await db.vector_indexes.update_one(
+            {"user_id": user_id},
+            {"$set": {"vector_count": vs.get_count(), "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    except Exception as e:
+        import traceback; traceback.print_exc()
         
     return {"message": "Document deleted successfully"}
 
@@ -193,9 +212,13 @@ async def process_document(document_id: str, user_id: str = Depends(get_current_
     )
     
     try:
+        print(f"[MIRRORMIND][PROCESS]\nProcessing started\ndocument_id={document_id}\n")
+        
         # Run processing from local file
         local_path = os.path.join(os.path.dirname(__file__), "..", "uploads", f"{document_id}.pdf")
         result = await process_pdf_document(local_path, document_id, user_id)
+        
+        print(f"[MIRRORMIND][PROCESS]\nText extraction completed\ndocument_id={document_id}\npages={result['page_count']}\ncharacters={sum(len(c['text']) for c in result['chunks'])}\n")
         
         # Delete old chunks if any (safe reprocessing)
         await db.document_chunks.delete_many({"document_id": document_id, "user_id": user_id})
@@ -208,6 +231,7 @@ async def process_document(document_id: str, user_id: str = Depends(get_current_
             
         if chunks:
             await db.document_chunks.insert_many(chunks)
+            print(f"[MIRRORMIND][CHUNK]\nChunks created\ndocument_id={document_id}\nchunk_count={len(chunks)}\n")
             
         # Update metadata
         await db.user_documents.update_one(
@@ -266,3 +290,127 @@ async def get_document_status(document_id: str, user_id: str = Depends(get_curre
         "processed_at": document.get("processed_at"),
         "processing_error": document.get("processing_error")
     }
+
+@router.post("/{document_id}/embed")
+async def embed_document(document_id: str, user_id: str = Depends(get_current_user), db = Depends(get_db)):
+    try:
+        obj_id = ObjectId(document_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+        
+    document = await db.user_documents.find_one({"_id": obj_id, "user_id": user_id})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if document.get("processing_status") != "processed":
+        raise HTTPException(status_code=400, detail="Document must be processed before embedding")
+        
+    # Mark as embedding
+    await db.user_documents.update_one(
+        {"_id": obj_id},
+        {"$set": {"embedding_status": "embedding", "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    print(f"[MIRRORMIND][EMBED]\nEmbedding requested\ndocument_id={document_id}\nuser_id={user_id}\n")
+    
+    try:
+        # Get chunks
+        chunks_cursor = db.document_chunks.find({"document_id": document_id, "user_id": user_id}).sort("chunk_index", 1)
+        chunks = await chunks_cursor.to_list(length=None)
+        
+        if not chunks:
+            # Handle empty document case
+            await db.user_documents.update_one(
+                {"_id": obj_id},
+                {"$set": {"embedding_status": "failed", "embedding_error": "No embeddable text found in this document."}}
+            )
+            return {"message": "No embeddable text found in this document."}
+            
+        print(f"[MIRRORMIND][EMBED]\nChunks found for embedding\ndocument_id={document_id}\nchunk_count={len(chunks)}\n")
+            
+        from services.embedding_service import get_embedding_service
+        from services.vector_store import VectorStore
+        
+        es = get_embedding_service()
+        dimension = es.get_dimension()
+        print(f"[MIRRORMIND][EMBED]\nEmbedding model loaded\n")
+        
+        # Idempotency: initialize store, remove existing vectors for this document
+        vs = VectorStore(user_id, dimension)
+        vs.remove_document_vectors(document_id)
+        
+        # Embed chunks
+        texts = [chunk["text"] for chunk in chunks]
+        embeddings = es.embed(texts)
+        
+        print(f"[MIRRORMIND][EMBED]\nEmbeddings generated\ndocument_id={document_id}\nvector_count={len(embeddings)}\ndimension={dimension}\n")
+        
+        # Prepare metadata
+        metadatas = []
+        for chunk in chunks:
+            metadatas.append({
+                "user_id": user_id,
+                "document_id": document_id,
+                "chunk_id": str(chunk["_id"]),
+                "chunk_index": chunk.get("chunk_index", 0),
+                "page_start": chunk.get("page_start", 1),
+                "page_end": chunk.get("page_end", 1)
+            })
+            
+        # Add to FAISS
+        print(f"[MIRRORMIND][FAISS]\nVector index update started\nuser_id={user_id}\n")
+        vs.add_vectors(embeddings, metadatas)
+        
+        # Update MongoDB vector metadata
+        now_str = datetime.now(timezone.utc).isoformat()
+        await db.vector_indexes.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "index_version": 1,
+                    "embedding_model": es.get_model_name(),
+                    "embedding_dimension": dimension,
+                    "distance_metric": "inner_product",
+                    "normalized": True,
+                    "vector_count": vs.get_count(),
+                    "index_path": str(vs.index_path),
+                    "updated_at": now_str
+                }
+            },
+            upsert=True
+        )
+        
+        print(f"[MIRRORMIND][FAISS]\nVector index update completed\nuser_id={user_id}\ntotal_vectors={vs.get_count()}\n")
+        
+        # Update document status
+        await db.user_documents.update_one(
+            {"_id": obj_id},
+            {
+                "$set": {
+                    "embedding_status": "embedded",
+                    "embedded_chunk_count": len(chunks),
+                    "embedded_at": now_str,
+                    "updated_at": now_str
+                },
+                "$unset": {"embedding_error": ""}
+            }
+        )
+        
+        return {
+            "document_id": document_id,
+            "embedded_chunks": len(chunks),
+            "embedding_dimension": dimension,
+            "index_updated": True
+        }
+        
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        await db.user_documents.update_one(
+            {"_id": obj_id},
+            {"$set": {
+                "embedding_status": "failed",
+                "embedding_error": str(e),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        raise HTTPException(status_code=500, detail="Failed to embed document")

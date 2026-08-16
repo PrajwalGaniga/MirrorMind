@@ -2,9 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_db, setup_indexes
 import models.db_models
-from routes import auth, students, predict, developer, uploads, settings, extension, documents
-
-
+from routes import auth, students, predict, developer, uploads, settings, extension, documents, retrieval, intelligence, voice
 
 app = FastAPI(title="MirrorMind API", version="1.0.0")
 
@@ -28,6 +26,9 @@ app.include_router(uploads.router, prefix="/api/upload", tags=["Uploads"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(extension.router, prefix="/api/extension", tags=["Extension"])
 app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
+app.include_router(retrieval.router, prefix="/api/retrieval", tags=["Retrieval"])
+app.include_router(intelligence.router, prefix="/api/intelligence", tags=["Intelligence"])
+app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])
 
 @app.get("/")
 def root():
