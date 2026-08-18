@@ -84,6 +84,33 @@ export default function Documents() {
     }
   };
 
+  const handleViewDocument = async (doc) => {
+    if (doc.cloudinary_url) {
+      window.open(doc.cloudinary_url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/documents/${doc._id}/download`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Failed to fetch document');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      
+      // Cleanup object URL after a while to avoid memory leaks
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      alert('Failed to open document. It may have been deleted.');
+    }
+  };
+
   const handleProcess = async (docId) => {
     try {
       // 1. Start Processing
@@ -187,7 +214,7 @@ export default function Documents() {
                   
                   <div style={{ fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <strong>Status:</strong>
-                    {doc.processing_status === 'uploaded' && <span>Uploaded to Cloudinary. Not processed yet.</span>}
+                    {doc.processing_status === 'uploaded' && <span>Uploaded. Not processed yet.</span>}
                     {doc.processing_status === 'processing' && (
                       <span style={{ color: 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
@@ -218,15 +245,13 @@ export default function Documents() {
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <a 
-                      href={doc.cloudinary_url} 
-                      target="_blank" 
-                      rel="noreferrer"
+                    <button 
+                      onClick={() => handleViewDocument(doc)}
                       className="btn"
-                      style={{ textDecoration: 'none', background: '#f5f5f5', color: '#333' }}
+                      style={{ background: '#f5f5f5', color: '#333' }}
                     >
                       View
-                    </a>
+                    </button>
                     <button 
                       className="btn btn-danger" 
                       onClick={() => handleDelete(doc._id)}

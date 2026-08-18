@@ -5,6 +5,7 @@ import cloudinary.uploader
 import cloudinary.api
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi.responses import FileResponse
 from typing import List, Optional
 from bson import ObjectId
 from pydantic import BaseModel, Field
@@ -63,22 +64,6 @@ async def upload_document(
     original_filename = file.filename
     file_ext = "pdf"
     
-    # Upload to Cloudinary
-    try:
-        cloudinary_response = cloudinary.uploader.upload(
-            content,
-            folder=f"mirrormind/users/{user_id}/documents",
-            resource_type="auto",
-            public_id=f"{uuid.uuid4().hex}_{original_filename.replace(' ', '_')}"
-        )
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Cloudinary upload failed")
-        
-    secure_url = cloudinary_response.get("secure_url")
-    public_id = cloudinary_response.get("public_id")
-    resource_type = cloudinary_response.get("resource_type")
-    
     now_str = datetime.now(timezone.utc).isoformat()
     
     document_data = {
@@ -89,9 +74,6 @@ async def upload_document(
         "file_type": file_ext,
         "mime_type": file.content_type,
         "file_size": file_size,
-        "cloudinary_url": secure_url,
-        "cloudinary_public_id": public_id,
-        "cloudinary_resource_type": resource_type,
         "processing_status": "uploaded",
         "uploaded_at": now_str,
         "updated_at": now_str
@@ -111,11 +93,6 @@ async def upload_document(
             
         return document_data
     except Exception as e:
-        # Revert cloudinary upload if db insert fails
-        try:
-            cloudinary.uploader.destroy(public_id, resource_type=resource_type)
-        except:
-            pass
         raise HTTPException(status_code=500, detail="Failed to save document metadata")
 
 @router.get("", response_model=List[DocumentResponse])
@@ -140,6 +117,28 @@ async def get_document(document_id: str, user_id: str = Depends(get_current_user
     document["_id"] = str(document["_id"])
     return document
 
+@router.get("/{document_id}/download")
+async def download_document(document_id: str, user_id: str = Depends(get_current_user), db = Depends(get_db)):
+    try:
+        obj_id = ObjectId(document_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+        
+    document = await db.user_documents.find_one({"_id": obj_id, "user_id": user_id})
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    local_path = os.path.join(os.path.dirname(__file__), "..", "uploads", f"{document_id}.pdf")
+    if not os.path.exists(local_path):
+        # Fallback to cloudinary if it's an old document
+        cloudinary_url = document.get("cloudinary_url")
+        if cloudinary_url:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(cloudinary_url)
+        raise HTTPException(status_code=404, detail="File not found on server")
+        
+    return FileResponse(local_path, media_type="application/pdf", filename=document.get("filename", "document.pdf"))
+
 @router.delete("/{document_id}")
 async def delete_document(document_id: str, user_id: str = Depends(get_current_user), db = Depends(get_db)):
     try:
@@ -152,16 +151,12 @@ async def delete_document(document_id: str, user_id: str = Depends(get_current_u
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
         
-    public_id = document.get("cloudinary_public_id")
-    resource_type = document.get("cloudinary_resource_type", "image") # Auto handles fallback but 'raw' might be used for PDFs
-    
-    # Delete from Cloudinary
-    if public_id:
+    # Delete local file if it exists
+    local_path = os.path.join(os.path.dirname(__file__), "..", "uploads", f"{document_id}.pdf")
+    if os.path.exists(local_path):
         try:
-            # For PDFs, Cloudinary often treats them as 'image' in the uploader if resource_type="auto"
-            cloudinary.uploader.destroy(public_id, resource_type=resource_type)
-        except Exception as e:
-            # We log it but proceed to delete from our db so user isn't stuck
+            os.remove(local_path)
+        except:
             pass
             
     # Delete from MongoDB
@@ -201,9 +196,6 @@ async def process_document(document_id: str, user_id: str = Depends(get_current_
     document = await db.user_documents.find_one({"_id": obj_id, "user_id": user_id})
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-        
-    if not document.get("cloudinary_url"):
-        raise HTTPException(status_code=400, detail="Document missing Cloudinary URL")
         
     # Set to processing
     await db.user_documents.update_one(
@@ -245,10 +237,6 @@ async def process_document(document_id: str, user_id: str = Depends(get_current_
             }}
         )
         
-        # Delete local file after processing
-        if os.path.exists(local_path):
-            os.remove(local_path)
-            
         return {"message": "Document processed successfully"}
         
     except Exception as e:

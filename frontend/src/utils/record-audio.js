@@ -11,11 +11,24 @@ export class AudioRecorder {
     this.pcmBuffers = [];
     this.recordingLength = 0;
     this.sampleRate = 16000; // Required by Whisper
+    
+    // Silence detection properties
+    this.onSilence = null;
+    this.onMaxDuration = null;
+    this.silenceThreshold = 0.01; // RMS threshold
+    this.silenceDuration = 1500; // ms of silence before triggering
+    this.maxDuration = 30000; // ms of max recording
+    this.silenceStart = null;
+    this.startTime = null;
+    this.stopped = false;
   }
 
   async start() {
     this.pcmBuffers = [];
     this.recordingLength = 0;
+    this.stopped = false;
+    this.startTime = null;
+    this.silenceStart = null;
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
@@ -31,12 +44,46 @@ export class AudioRecorder {
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     
     this.processor.onaudioprocess = (e) => {
+      if (this.stopped) return;
+      
       const inputData = e.inputBuffer.getChannelData(0);
       const bufferData = new Float32Array(inputData.length);
       bufferData.set(inputData);
       
       this.pcmBuffers.push(bufferData);
       this.recordingLength += bufferData.length;
+      
+      // Calculate RMS for silence detection
+      if (this.onSilence || this.onMaxDuration) {
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / inputData.length);
+        const now = Date.now();
+        
+        if (!this.startTime) this.startTime = now;
+        
+        // Max duration check
+        if (this.onMaxDuration && (now - this.startTime) >= this.maxDuration) {
+          this.stopped = true;
+          this.onMaxDuration();
+          return;
+        }
+        
+        // Silence detection check
+        if (this.onSilence) {
+          if (rms < this.silenceThreshold) {
+            if (!this.silenceStart) this.silenceStart = now;
+            else if (now - this.silenceStart >= this.silenceDuration) {
+              this.stopped = true;
+              this.onSilence();
+            }
+          } else {
+            this.silenceStart = null; // Reset silence timer if we hear noise
+          }
+        }
+      }
     };
     
     this.mediaStreamSource.connect(this.processor);
@@ -45,6 +92,7 @@ export class AudioRecorder {
 
   stop() {
     return new Promise((resolve) => {
+      this.stopped = true;
       if (!this.processor) return resolve(null);
       
       this.processor.disconnect();

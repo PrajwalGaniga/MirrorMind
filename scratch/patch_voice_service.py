@@ -1,4 +1,6 @@
 import os
+
+code = """import os
 import io
 import wave
 import numpy as np
@@ -98,3 +100,7 @@ class TTSService:
             print(f"[VOICE][ERROR] Stream synthesis error: {e}")
         finally:
             asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+"""
+
+with open("backend/services/voice_service.py", "w", encoding="utf-8") as f:
+    f.write(code)

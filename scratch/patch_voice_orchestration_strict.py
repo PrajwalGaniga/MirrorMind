@@ -1,15 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import os
+
+code = """import { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Loader2, Volume2, Square, Cloud, Monitor, ToggleRight, ToggleLeft } from 'lucide-react';
 import api from '../api/axios';
 import { AudioRecorder } from '../utils/record-audio';
 import { useAuth } from '../context/AuthContext';
-import { streamingTTS } from '../utils/streaming-tts';
-import { browserTTS } from '../utils/browser-tts';
-import { WakeRecognitionManager, matchesWakePhrase } from '../utils/wake-recognition';
-import { audioMeter } from '../utils/audio-meter';
-import VoiceStatePanel from './VoiceStatePanel';
 
-// ── Animated dots helper ───────────────────────────────────────────────────
 function AnimatedMessage({ icon, text }) {
   const [dots, setDots] = useState('');
   useEffect(() => {
@@ -24,13 +20,12 @@ function AnimatedMessage({ icon, text }) {
   );
 }
 
-// ── Processing stage definitions ───────────────────────────────────────────
 const STAGES = {
   openrouter: [
     { icon: '🔎', text: 'Understanding your question' },
     { icon: '📚', text: 'Searching your profile and documents' },
     { icon: '🧠', text: 'Building personalized context' },
-    { icon: '☁',  text: 'Asking OpenRouter' },
+    { icon: '☁', text: 'Asking OpenRouter' },
     { icon: '✨', text: 'Preparing your answer' },
   ],
   ollama: [
@@ -56,10 +51,9 @@ const SUGGESTIONS = [
   'Summarize my uploaded project experience.',
 ];
 
-// ── Formatted LLM response renderer ───────────────────────────────────────
 const FormattedResponse = ({ text }) => {
   if (!text) return null;
-  const lines = text.split('\n');
+  const lines = text.split('\\n');
   return (
     <div style={{ lineHeight: '1.7', fontSize: 15 }}>
       {lines.map((line, i) => {
@@ -69,12 +63,12 @@ const FormattedResponse = ({ text }) => {
 
         if (content.trim().startsWith('- ')) {
           isBullet = true;
-          content = content.replace(/^\s*-\s/, '');
-        } else if (/^\s*\d+\.\s/.test(content)) {
+          content = content.replace(/^\\s*-\\s/, '');
+        } else if (/^\\s*\\d+\\.\\s/.test(content)) {
           isNumbered = true;
         }
 
-        const parts = content.split(/(\*\*.*?\*\*)/g);
+        const parts = content.split(/(\\*\\*.*?\\*\\*)/g);
         const renderedParts = parts.map((part, j) => {
           if (part.startsWith('**') && part.endsWith('**')) {
             return <strong key={j}>{part.slice(2, -2)}</strong>;
@@ -99,7 +93,6 @@ const FormattedResponse = ({ text }) => {
   );
 };
 
-// ── Provider badge ─────────────────────────────────────────────────────────
 function ProviderBadge({ provider, model }) {
   if (provider === 'ollama') {
     return (
@@ -115,177 +108,159 @@ function ProviderBadge({ provider, model }) {
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
 export default function Intelligence() {
-  const [question, setQuestion]           = useState('');
-  const [provider, setProvider]           = useState('openrouter');
-  const [loading, setLoading]             = useState(false);
-  const [stageIndex, setStageIndex]       = useState(0);
-  const [error, setError]                 = useState(null);
-  const [result, setResult]               = useState(null);
-  const [elapsedTime, setElapsedTime]     = useState(0);
+  const [question, setQuestion] = useState('');
+  const [provider, setProvider] = useState('openrouter');
+  const [loading, setLoading] = useState(false);
+  const [stageIndex, setStageIndex] = useState(0);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   const { user } = useAuth();
-
-  // ── Voice state machine ──────────────────────────────────────────────────
-  const [handsFree, setHandsFree]               = useState(false);
-  const [voiceState, setVoiceState]             = useState('IDLE');
-  const [wakeStatus, setWakeStatus]             = useState('STOPPED'); // ACTIVE | RECONNECTING | STOPPED | MIC_ERROR
-  const [voiceError, setVoiceError]             = useState('');
+  const [handsFree, setHandsFree] = useState(false);
+  const [voiceState, setVoiceState] = useState('IDLE');
+  const [voiceError, setVoiceError] = useState('');
   const [pendingTranscript, setPendingTranscript] = useState('');
 
-  // ── Refs ────────────────────────────────────────────────────────────────
-  const recorderRef          = useRef(null);
-  const timerRef             = useRef(null);
-  const stageTimerRef        = useRef(null);
-  const wakeRecMgrRef        = useRef(null);  // WakeRecognitionManager instance
-  const confTimeoutRef       = useRef(null);
+  const recorderRef = useRef(null);
+  const audioPlayerRef = useRef(null);
+  const timerRef = useRef(null);
+  const stageTimerRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const confTimeoutRef = useRef(null);
 
-  // Stable refs for async callbacks
-  const voiceStateRef        = useRef(voiceState);
-  const handsFreeRef         = useRef(handsFree);
-  const pendingTranscriptRef = useRef(pendingTranscript);
-  const providerRef          = useRef(provider);
-
-  useEffect(() => { voiceStateRef.current = voiceState;
+  const voiceStateRef = useRef(voiceState);
+  useEffect(() => { 
+    voiceStateRef.current = voiceState; 
     console.log(`[MIRRORMIND][VOICE] state=${voiceState}`);
   }, [voiceState]);
-  useEffect(() => { handsFreeRef.current = handsFree; },         [handsFree]);
+  
+  const handsFreeRef = useRef(handsFree);
+  useEffect(() => { handsFreeRef.current = handsFree; }, [handsFree]);
+  
+  const pendingTranscriptRef = useRef(pendingTranscript);
   useEffect(() => { pendingTranscriptRef.current = pendingTranscript; }, [pendingTranscript]);
-  useEffect(() => { providerRef.current = provider; },           [provider]);
 
-  // ── Wake recognition result handler ─────────────────────────────────────
-  // Defined with useCallback so it's stable across renders.
-  const handleWakeResult = useCallback((transcript, mode) => {
-    const currentState = voiceStateRef.current;
-
-    if (mode === 'wake' && currentState === 'WAKE_LISTENING') {
-      if (matchesWakePhrase(transcript)) {
-        console.log(`[MIRRORMIND][VOICE] wake_word_detected transcript="${transcript}"`);
-        handleWakeWordDetected();
-      }
-    } else if (mode === 'confirm' && currentState === 'AWAITING_CONFIRMATION') {
-      console.log(`[MIRRORMIND][VOICE] confirmation_received="${transcript}"`);
-      handleConfirmation(transcript);
+  const stopPlayback = () => {
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
-  const handleWakeStatusChange = useCallback((status) => {
-    console.log(`[MIRRORMIND][WAKE_MGR] status=${status}`);
-    setWakeStatus(status);
-    if (status === 'MIC_ERROR') {
-      setVoiceError('Microphone unavailable or permission denied.');
-      setVoiceState('ERROR');
-      setHandsFree(false);
-    }
-  }, []);
+  const cleanUpVoiceState = () => {
+    stopSpeechRecognition();
+    stopPlayback();
+    if (recorderRef.current) recorderRef.current.stop().catch(()=>{});
+    if (confTimeoutRef.current) clearTimeout(confTimeoutRef.current);
+    setVoiceState('IDLE');
+    console.log(`[MIRRORMIND][VOICE] cleanup_complete`);
+  };
 
-  // ── Initialize/destroy WakeRecognitionManager on mount ──────────────────
-  useEffect(() => {
-    wakeRecMgrRef.current = new WakeRecognitionManager({
-      onResult:      handleWakeResult,
-      onStateChange: handleWakeStatusChange,
-    });
-    return () => {
-      if (wakeRecMgrRef.current) wakeRecMgrRef.current.stop();
-    };
-  }, [handleWakeResult, handleWakeStatusChange]);
-
-  // ── Start / stop wake listener based on handsFree toggle ────────────────
   useEffect(() => {
     if (handsFree) {
       console.log(`[MIRRORMIND][VOICE] Hands-Free Mode ENABLED`);
-      streamingTTS.initAudio();
       setVoiceState('WAKE_LISTENING');
-      setVoiceError('');
-      wakeRecMgrRef.current?.start('wake');
+      startSpeechRecognition();
     } else {
       console.log(`[MIRRORMIND][VOICE] Hands-Free Mode DISABLED`);
       cleanUpVoiceState();
     }
-    // cleanUpVoiceState is stable (uses refs only)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => cleanUpVoiceState();
   }, [handsFree]);
 
-  // ── Cleanup helper (uses refs, safe in callbacks) ────────────────────────
-  const cleanUpVoiceState = () => {
-    wakeRecMgrRef.current?.stop();
-    streamingTTS.stop();
-    browserTTS.stop();
-    audioMeter.disconnect();
-    if (recorderRef.current) recorderRef.current.stop().catch(() => {});
-    if (confTimeoutRef.current) clearTimeout(confTimeoutRef.current);
-    setVoiceState('IDLE');
-    setWakeStatus('STOPPED');
-    console.log(`[MIRRORMIND][VOICE] cleanup_complete`);
+  const startSpeechRecognition = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      setVoiceError('Browser does not support local wake-word detection.');
+      setHandsFree(false);
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!recognitionRef.current) {
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'en-US';
+
+      recognitionRef.current.onresult = (event) => {
+        const currentState = voiceStateRef.current;
+        const last = event.results.length - 1;
+        const transcript = event.results[last][0].transcript.trim().toLowerCase();
+        const cleanTranscript = transcript.replace(/[.,!?]/g, '');
+
+        if (currentState === 'WAKE_LISTENING') {
+          if (cleanTranscript.includes('hello mirrormind') || cleanTranscript.includes('hello mirror mind')) {
+            console.log(`[MIRRORMIND][VOICE] wake_word_detected=true`);
+            handleWakeWordDetected();
+          }
+        } else if (currentState === 'AWAITING_CONFIRMATION') {
+          console.log(`[MIRRORMIND][VOICE] confirmation_received="${transcript}"`);
+          handleConfirmation(cleanTranscript);
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        if (handsFreeRef.current && (voiceStateRef.current === 'WAKE_LISTENING' || voiceStateRef.current === 'AWAITING_CONFIRMATION')) {
+          try { recognitionRef.current.start(); } catch (e) {}
+        }
+      };
+    }
+    
+    try {
+      recognitionRef.current.start();
+    } catch (e) {}
   };
 
-  // ── Wake word detected → greeting ────────────────────────────────────────
-  const handleWakeWordDetected = async () => {
-    // Stop the wake listener immediately — we do NOT want it running during greeting.
-    wakeRecMgrRef.current?.stop();
-    setWakeStatus('STOPPED');
+  const stopSpeechRecognition = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      try { recognitionRef.current.stop(); } catch (e) {}
+      recognitionRef.current = null;
+    }
+  };
 
+  // ── 1. Wake Detected -> Greeting ──
+  const handleWakeWordDetected = async () => {
     setVoiceState('WAKE_DETECTED');
     setResult(null);
     setQuestion('');
     setPendingTranscript('');
-
-    // Small visual pause so "Wake word detected" is visible
-    await new Promise(r => setTimeout(r, 500));
-    if (!handsFreeRef.current) return; // user may have toggled off
-
+    stopSpeechRecognition();
+    
     const greetingText = `Hello ${user?.name || 'there'}. How can I help you?`;
-    setVoiceState('GREETING');
-
-    try {
-      // Use browser-native TTS for greeting — instant, no Piper round-trip.
-      await browserTTS.speak(greetingText);
-    } catch (err) {
-      console.warn('[MIRRORMIND][GREETING] browser TTS failed, continuing', err);
-    }
-
-    if (handsFreeRef.current) {
-      startRecording(true);
-    }
+    await playTTS(greetingText, 'GREETING', () => {
+      if (handsFreeRef.current) {
+        startRecording(true); // Proceed to record user query
+      }
+    });
   };
 
-  // ── Start recording user query ────────────────────────────────────────────
+  // ── 2. Record User Query ──
   const startRecording = async (useSilenceDetection = false) => {
     try {
       setVoiceError('');
-      setVoiceState('LISTENING_FOR_QUERY');
+      setVoiceState(handsFreeRef.current ? 'LISTENING_FOR_QUERY' : 'LISTENING_FOR_QUERY');
       setResult(null);
-
       recorderRef.current = new AudioRecorder();
-
+      
       if (useSilenceDetection) {
-        recorderRef.current.onSilence      = () => stopRecording();
-        recorderRef.current.onMaxDuration  = () => stopRecording();
+        recorderRef.current.onSilence = () => stopRecording();
+        recorderRef.current.onMaxDuration = () => stopRecording();
       }
-
+      
       await recorderRef.current.start();
-
-      // Attach the audio meter to the live stream
-      if (recorderRef.current.stream) {
-        audioMeter.connect(recorderRef.current.stream);
-      }
     } catch (err) {
       setVoiceError('Microphone permission denied or unavailable.');
       setVoiceState('ERROR');
-      setWakeStatus('MIC_ERROR');
       if (handsFreeRef.current) setHandsFree(false);
     }
   };
 
-  // ── Stop recording → transcribe ───────────────────────────────────────────
+  // ── 3. Stop Recording -> Transcribe ──
   const stopRecording = async () => {
     if (!recorderRef.current) return;
-
-    audioMeter.disconnect();
     setVoiceState('TRANSCRIBING');
-
     try {
       const wavBlob = await recorderRef.current.stop();
       if (!wavBlob || wavBlob.size === 0) throw new Error('Empty recording.');
@@ -301,127 +276,140 @@ export default function Intelligence() {
 
       const transcribedText = res.data.text.trim();
       console.log(`[MIRRORMIND][VOICE] transcript="${transcribedText}"`);
-
-      // Guard against capturing the wake phrase itself or very short/noise clips
-      const clean = transcribedText.toLowerCase().replace(/[^\w\s]/g, '').trim();
-      const isTooShort     = clean.length < 3;
-      const isNoise        = ['yes', 'okay', 'ok', 'thank you', 'thanks', 'hello', 'bye', 'yep', 'yup', 'no'].includes(clean);
-      const isWakePhraseItself = matchesWakePhrase(clean);
-
-      if (isTooShort || isNoise || isWakePhraseItself) {
-        console.log(`[MIRRORMIND][VOICE] transcript_valid=false reason=${isWakePhraseItself ? 'wake_phrase' : 'too_short_or_noise'}`);
-        if (handsFreeRef.current) {
-          await speakBrowser("I didn't catch a question. Please try again.", 'ERROR');
-          returnToWakeListening();
-        } else {
-          throw new Error('Invalid or empty question detected.');
-        }
-        return;
+      
+      const clean = transcribedText.toLowerCase().replace(/[.,!?]/g, '');
+      const invalidPhrases = ['yes', 'okay', 'ok', 'thank you', 'thank you very much', 'thanks', 'hello', 'bye', 'yep', 'yup', 'no'];
+      
+      if (clean.length < 3 || invalidPhrases.includes(clean)) {
+         console.log(`[MIRRORMIND][VOICE] transcript_valid=false`);
+         if (handsFreeRef.current) {
+            await playTTS("I didn't catch a question. Please try again.", 'ERROR', () => {
+               if (handsFreeRef.current) {
+                 setVoiceState('WAKE_LISTENING');
+                 startSpeechRecognition();
+               }
+            });
+            return;
+         } else {
+            throw new Error("Invalid or empty question detected.");
+         }
       }
 
       console.log(`[MIRRORMIND][VOICE] transcript_valid=true`);
       setQuestion(transcribedText);
       setPendingTranscript(transcribedText);
-
+      
       if (handsFreeRef.current) {
-        const confText = `You said: ${transcribedText}. Should I proceed?`;
-        setVoiceState('CONFIRMING_TTS');
-        try {
-          await browserTTS.speak(confText);
-        } catch (err) {
-          console.warn('[MIRRORMIND][CONFIRM_TTS] failed, skipping', err);
-        }
-        if (handsFreeRef.current) {
-          setVoiceState('AWAITING_CONFIRMATION');
-          wakeRecMgrRef.current?.start('confirm');
-          // Auto-timeout if no confirmation received in 10 s
-          confTimeoutRef.current = setTimeout(async () => {
-            if (voiceStateRef.current === 'AWAITING_CONFIRMATION') {
-              wakeRecMgrRef.current?.stop();
-              try {
-                await browserTTS.speak("I'll wait. Say Hello MirrorMind whenever you need me.");
-              } catch (_) {}
-              returnToWakeListening();
+         // Ask for confirmation
+         const confText = `You said: ${transcribedText}. Should I proceed?`;
+         await playTTS(confText, 'CONFIRMING_TTS', () => {
+            if (handsFreeRef.current) {
+               setVoiceState('AWAITING_CONFIRMATION');
+               startSpeechRecognition();
+               confTimeoutRef.current = setTimeout(() => {
+                 if (voiceStateRef.current === 'AWAITING_CONFIRMATION') {
+                   playTTS("I'll wait. Say Hello MirrorMind whenever you need me.", 'ERROR', () => {
+                      if (handsFreeRef.current) {
+                        setVoiceState('WAKE_LISTENING');
+                        startSpeechRecognition();
+                      }
+                   });
+                 }
+               }, 8000);
             }
-          }, 10000);
-        }
+         });
       } else {
-        handleAsk(null, transcribedText);
+         // Manual input proceeds directly
+         handleAsk(null, transcribedText);
       }
 
     } catch (err) {
-      audioMeter.disconnect();
-      const msg = err.response?.data?.detail || err.message || 'Transcription failed.';
-      setVoiceError(msg);
+      setVoiceError(err.response?.data?.detail || err.message || 'Transcription failed.');
       setVoiceState('ERROR');
       console.error(`[MIRRORMIND][AUDIO][ERROR] transcript_failed`, err);
       if (handsFreeRef.current) {
         setTimeout(() => {
-          if (handsFreeRef.current) returnToWakeListening();
+          if (handsFreeRef.current) {
+            setVoiceState('WAKE_LISTENING');
+            startSpeechRecognition();
+          }
         }, 3000);
       }
     }
   };
 
-  // ── Handle yes/no confirmation ────────────────────────────────────────────
-  const handleConfirmation = async (transcript) => {
+  // ── 4. Process Confirmation ──
+  const handleConfirmation = (transcript) => {
     if (confTimeoutRef.current) clearTimeout(confTimeoutRef.current);
-    wakeRecMgrRef.current?.stop();
-
-    const yesWords = ['yes', 'yeah', 'okay', 'ok', 'sure', 'go ahead', 'proceed', 'tell me', 'ask', 'continue', 'do it'];
-    const noWords  = ['no', 'cancel', 'stop', 'not now', 'dont', 'do not'];
-
+    
+    const yesWords = ['yes', 'yeah', 'okay', 'ok', 'sure', 'go ahead', 'proceed', 'tell me', 'ask', 'continue'];
+    const noWords = ['no', 'cancel', 'stop', 'not now'];
+    
     const hasYes = yesWords.some(w => transcript.includes(w));
-    const hasNo  = noWords.some(w => transcript.includes(w));
+    const hasNo = noWords.some(w => transcript.includes(w));
 
     if (hasNo) {
       console.log(`[MIRRORMIND][VOICE] confirmed=false`);
-      try { await browserTTS.speak("Okay. I'll wait."); } catch (_) {}
-      returnToWakeListening();
+      playTTS("Okay. I'll wait for you.", 'ERROR', () => {
+         if (handsFreeRef.current) {
+           setVoiceState('WAKE_LISTENING');
+           startSpeechRecognition();
+         }
+      });
     } else if (hasYes) {
       console.log(`[MIRRORMIND][VOICE] confirmed=true`);
-      // Use the stored transcript — NOT the "yes" word itself
+      stopSpeechRecognition();
       handleAsk(null, pendingTranscriptRef.current);
     } else {
-      // Unclear — ask again
-      setVoiceState('CONFIRMING_TTS');
-      try { await browserTTS.speak("I didn't catch that. Please say yes or no."); } catch (_) {}
-      if (handsFreeRef.current) {
-        setVoiceState('AWAITING_CONFIRMATION');
-        wakeRecMgrRef.current?.start('confirm');
-        confTimeoutRef.current = setTimeout(async () => {
-          if (voiceStateRef.current === 'AWAITING_CONFIRMATION') {
-            wakeRecMgrRef.current?.stop();
-            try { await browserTTS.speak("I'll wait. Say Hello MirrorMind whenever you need me."); } catch (_) {}
-            returnToWakeListening();
-          }
-        }, 10000);
+      playTTS("I didn't catch that. Please say yes when you're ready.", 'CONFIRMING_TTS', () => {
+         if (handsFreeRef.current) {
+           setVoiceState('AWAITING_CONFIRMATION');
+           startSpeechRecognition();
+         }
+      });
+    }
+  };
+
+  // ── Generic TTS Player ──
+  const playTTS = async (text, stateName, onEndedCallback) => {
+    stopSpeechRecognition(); // ALWAYS pause ears when mouth is moving
+    try {
+      console.log(`[MIRRORMIND][AUDIO] TTS request started. text="${text}"`);
+      setVoiceState(stateName);
+      const response = await api.post('/api/voice/synthesize', { text }, { responseType: 'blob' });
+      console.log(`[MIRRORMIND][AUDIO] TTS response received. size=${response.data.size}`);
+      const audioUrl = URL.createObjectURL(response.data);
+      const audio = new Audio(audioUrl);
+      audioPlayerRef.current = audio;
+      
+      audio.onended = () => { 
+        console.log(`[MIRRORMIND][AUDIO] audio playback ended`);
+        URL.revokeObjectURL(audioUrl); 
+        onEndedCallback();
+      };
+      console.log(`[MIRRORMIND][AUDIO] audio.play() started`);
+      await audio.play();
+      console.log(`[MIRRORMIND][AUDIO] audio playback started`);
+    } catch (err) {
+      console.error(`[MIRRORMIND][AUDIO][ERROR] playback_failed:`, err);
+      if (err.name === 'NotAllowedError') {
+         setVoiceError('Browser blocked automatic audio playback. Click once anywhere on the page to enable voice responses.');
+      } else {
+         setVoiceError('Audio playback failed.');
       }
+      setVoiceState('ERROR');
+      setTimeout(() => {
+        onEndedCallback();
+      }, 2000); // Wait 2 seconds on error before calling callback
     }
   };
 
-  // ── Return to wake-word listening ─────────────────────────────────────────
-  const returnToWakeListening = () => {
-    if (!handsFreeRef.current) return;
-    setVoiceState('WAKE_LISTENING');
-    setVoiceError('');
-    wakeRecMgrRef.current?.start('wake');
-  };
-
-  // ── Helper: speak with browser TTS, set state ─────────────────────────────
-  const speakBrowser = async (text, stateName) => {
-    setVoiceState(stateName);
-    try { await browserTTS.speak(text); } catch (err) {
-      console.warn('[MIRRORMIND][BROWSER_TTS] speak failed', err);
-    }
-  };
-
-  // ── Processing stage animation ────────────────────────────────────────────
   const runStages = (prov) => {
     const stages = STAGES[prov] || STAGES.openrouter;
     const delays = STAGE_DELAYS[prov] || STAGE_DELAYS.openrouter;
     let idx = 0;
     setStageIndex(0);
+
     const advance = () => {
       idx += 1;
       if (idx < stages.length - 1) {
@@ -438,23 +426,23 @@ export default function Intelligence() {
     if (stageTimerRef.current) clearTimeout(stageTimerRef.current);
   };
 
-  // ── Main ask handler ──────────────────────────────────────────────────────
   const handleAsk = async (e, customQuestion = null, overrideProvider = null) => {
     if (e) e.preventDefault();
     const q = customQuestion || question;
     if (!q.trim() || loading) return;
 
-    console.log(`[MIRRORMIND][VOICE] sending_to_intelligence=true question="${q.substring(0, 80)}"`);
-    const activeProvider = overrideProvider || providerRef.current;
+    console.log(`[MIRRORMIND][VOICE] sending_to_intelligence=true`);
+    const activeProvider = overrideProvider || provider;
 
     setLoading(true);
     setError(null);
     setResult(null);
     setElapsedTime(0);
     runStages(activeProvider);
-    setVoiceState('THINKING');
 
     timerRef.current = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
+
+    setVoiceState('THINKING');
 
     try {
       const response = await api.post('/api/intelligence/ask', {
@@ -463,32 +451,21 @@ export default function Intelligence() {
         provider: activeProvider,
       });
 
-      console.log(`[MIRRORMIND][VOICE] LLM response received`);
-      const llmAnswer = response.data.answer;
-
       setResult(response.data);
-      setLoading(false);
-      stopStages();
-      if (timerRef.current) clearInterval(timerRef.current);
 
       if (handsFreeRef.current || customQuestion) {
-        setVoiceState('SPEAKING');
-        try {
-          // streamingTTS handles cleanTextForSpeech internally
-          await streamingTTS.speak(llmAnswer);
-        } catch (ttsErr) {
-          console.warn('[MIRRORMIND][TTS] streamingTTS failed, falling back to browserTTS', ttsErr);
-          try { await browserTTS.speak(llmAnswer); } catch (_) {}
-        }
-        if (handsFreeRef.current) {
-          returnToWakeListening();
-        } else {
-          setVoiceState('IDLE');
-        }
+        await playTTS(response.data.answer, 'SPEAKING', () => {
+           console.log(`[MIRRORMIND][VOICE] returning_to_wake_listener=true`);
+           if (handsFreeRef.current) {
+             setVoiceState('WAKE_LISTENING');
+             startSpeechRecognition();
+           } else {
+             setVoiceState('IDLE');
+           }
+        });
       } else {
         setVoiceState('IDLE');
       }
-
     } catch (err) {
       const detail = err.response?.data?.detail;
       if (detail && typeof detail === 'object') {
@@ -508,27 +485,16 @@ export default function Intelligence() {
       setVoiceState('ERROR');
       if (handsFreeRef.current) {
         setTimeout(() => {
-          if (handsFreeRef.current) returnToWakeListening();
+          if (handsFreeRef.current) {
+            setVoiceState('WAKE_LISTENING');
+            startSpeechRecognition();
+          }
         }, 3000);
       }
+    } finally {
       setLoading(false);
       stopStages();
       if (timerRef.current) clearInterval(timerRef.current);
-    }
-  };
-
-  // ── Mic button click (non-hands-free manual mode) ─────────────────────────
-  const handleMicClick = async () => {
-    if (voiceState === 'LISTENING_FOR_QUERY') {
-      stopRecording();
-    } else if (['SPEAKING', 'SPEECH_PAUSED', 'GREETING', 'CONFIRMING_TTS'].includes(voiceState)) {
-      streamingTTS.stop();
-      browserTTS.stop();
-      setHandsFree(false);
-      cleanUpVoiceState();
-    } else {
-      setHandsFree(false);
-      startRecording();
     }
   };
 
@@ -538,10 +504,20 @@ export default function Intelligence() {
     setError(null);
   };
 
-  const currentStages = STAGES[provider] || STAGES.openrouter;
-  const currentStage  = currentStages[Math.min(stageIndex, currentStages.length - 1)];
+  const handleMicClick = async () => {
+    if (voiceState === 'LISTENING_FOR_QUERY') stopRecording();
+    else if (voiceState === 'SPEAKING' || voiceState === 'GREETING' || voiceState === 'CONFIRMING_TTS') {
+      setHandsFree(false);
+      stopPlayback();
+    } else {
+      setHandsFree(false);
+      startRecording();
+    }
+  };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const currentStages = STAGES[provider] || STAGES.openrouter;
+  const currentStage = currentStages[Math.min(stageIndex, currentStages.length - 1)];
+
   return (
     <div className="card" style={{ marginBottom: 24, padding: '32px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -552,7 +528,6 @@ export default function Intelligence() {
         Your personal academic and career intelligence assistant.
       </p>
 
-      {/* ── Provider + Hands-Free controls ── */}
       <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 10 }}>
@@ -611,8 +586,14 @@ export default function Intelligence() {
           <button
             type="button"
             onClick={() => {
-              if (!handsFree) streamingTTS.initAudio();
               setHandsFree(!handsFree);
+              if (!handsFree) {
+                // Initialize audio to bypass autoplay policy
+                const audio = new Audio();
+                audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+                audio.volume = 0.01;
+                audio.play().catch((err) => { console.error(`[MIRRORMIND][AUDIO][ERROR] Initial autoplay block:`, err) });
+              }
             }}
             disabled={loading}
             style={{
@@ -632,40 +613,34 @@ export default function Intelligence() {
         </div>
       </div>
 
-      {/* ── Voice State Panel (hands-free only) ── */}
-      {handsFree && (
-        <VoiceStatePanel
-          voiceState={voiceState}
-          wakeStatus={wakeStatus}
-          pendingTranscript={pendingTranscript}
-          provider={provider}
-          voiceError={voiceError}
-        />
-      )}
-
-      {/* ── Error display ── */}
       {error && (
         <div style={{ marginBottom: 20, padding: 16, borderRadius: 10, background: 'rgba(255,77,79,0.08)', border: '1px solid rgba(255,77,79,0.3)' }}>
           <div style={{ fontWeight: 700, color: '#ff4d4f', marginBottom: 6, fontSize: 15 }}>
-            {error.code === 'OLLAMA_TIMEOUT'        && '⏱ Local Ollama timed out'}
-            {error.code === 'OLLAMA_CONNECT_ERROR'  && '🔌 Cannot connect to Local Ollama'}
-            {error.code === 'OPENROUTER_TIMEOUT'    && '⏱ OpenRouter timed out'}
-            {!error.code                            && '❌ Request failed'}
+            {error.code === 'OLLAMA_TIMEOUT' && '⏱ Local Ollama timed out'}
+            {error.code === 'OLLAMA_CONNECT_ERROR' && '🔌 Cannot connect to Local Ollama'}
+            {error.code === 'OPENROUTER_TIMEOUT' && '⏱ OpenRouter timed out'}
+            {!error.code && '❌ Request failed'}
           </div>
           <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>{error.message}</div>
-          {error.detail     && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{error.detail}</div>}
+          {error.detail && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{error.detail}</div>}
           {error.suggestion && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{error.suggestion}</span>
               {(error.code === 'OLLAMA_TIMEOUT' || error.code === 'OLLAMA_CONNECT_ERROR') && (
-                <button className="btn btn-secondary" style={{ padding: '4px 14px', fontSize: 13, height: 'auto' }}
-                  onClick={() => { setProvider('openrouter'); setError(null); }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '4px 14px', fontSize: 13, height: 'auto' }}
+                  onClick={() => { setProvider('openrouter'); setError(null); }}
+                >
                   ☁ Switch to OpenRouter
                 </button>
               )}
               {error.code === 'OPENROUTER_TIMEOUT' && (
-                <button className="btn btn-secondary" style={{ padding: '4px 14px', fontSize: 13, height: 'auto' }}
-                  onClick={() => { setProvider('ollama'); setError(null); }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '4px 14px', fontSize: 13, height: 'auto' }}
+                  onClick={() => { setProvider('ollama'); setError(null); }}
+                >
                   💻 Switch to Local Ollama
                 </button>
               )}
@@ -674,7 +649,6 @@ export default function Intelligence() {
         </div>
       )}
 
-      {/* ── Query form ── */}
       <form onSubmit={(e) => handleAsk(e, null)} style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
           <textarea
@@ -692,34 +666,30 @@ export default function Intelligence() {
             onClick={handleMicClick}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', width: 64,
-              backgroundColor: voiceState === 'LISTENING_FOR_QUERY' ? '#ff4d4f'
-                : ['SPEAKING', 'SPEECH_PAUSED', 'GREETING', 'CONFIRMING_TTS'].includes(voiceState) ? '#52c41a'
-                : undefined,
-              color: ['LISTENING_FOR_QUERY', 'SPEAKING', 'SPEECH_PAUSED', 'GREETING', 'CONFIRMING_TTS'].includes(voiceState) ? '#fff' : undefined,
-              border: ['LISTENING_FOR_QUERY', 'SPEAKING', 'SPEECH_PAUSED', 'GREETING', 'CONFIRMING_TTS'].includes(voiceState) ? 'none' : undefined,
+              backgroundColor: voiceState === 'LISTENING_FOR_QUERY' ? '#ff4d4f' : (voiceState === 'SPEAKING' || voiceState === 'GREETING' || voiceState === 'CONFIRMING_TTS') ? '#52c41a' : undefined,
+              color: (voiceState === 'LISTENING_FOR_QUERY' || voiceState === 'SPEAKING' || voiceState === 'GREETING' || voiceState === 'CONFIRMING_TTS') ? '#fff' : undefined,
+              border: (voiceState === 'LISTENING_FOR_QUERY' || voiceState === 'SPEAKING' || voiceState === 'GREETING' || voiceState === 'CONFIRMING_TTS') ? 'none' : undefined,
               transition: 'background-color 0.3s',
             }}
             disabled={voiceState === 'TRANSCRIBING' || voiceState === 'THINKING' || loading}
-            title={
-              voiceState === 'LISTENING_FOR_QUERY' ? 'Stop recording'
-              : ['SPEAKING', 'SPEECH_PAUSED', 'GREETING', 'CONFIRMING_TTS'].includes(voiceState) ? 'Stop speaking'
-              : 'Use voice'
-            }
+            title={voiceState === 'LISTENING_FOR_QUERY' ? 'Stop recording' : (voiceState === 'SPEAKING' || voiceState === 'GREETING' || voiceState === 'CONFIRMING_TTS') ? 'Stop speaking' : 'Use voice'}
           >
-            {voiceState === 'LISTENING_FOR_QUERY' ? <Square size={24} />
-              : ['SPEAKING', 'SPEECH_PAUSED', 'GREETING', 'CONFIRMING_TTS'].includes(voiceState) ? <Volume2 size={24} />
-              : <Mic size={24} />}
+            {voiceState === 'LISTENING_FOR_QUERY' ? <Square size={24} /> : (voiceState === 'SPEAKING' || voiceState === 'GREETING' || voiceState === 'CONFIRMING_TTS') ? <Volume2 size={24} /> : <Mic size={24} />}
           </button>
         </div>
 
-        {/* Non-hands-free inline status (simple one-liner) */}
-        {!handsFree && voiceState !== 'IDLE' && (
+        {voiceState !== 'IDLE' && (
           <div style={{ marginTop: 8, fontSize: 14, color: voiceState === 'ERROR' ? '#ff4d4f' : 'var(--primary-color)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {voiceState === 'LISTENING_FOR_QUERY' && <><span style={{ backgroundColor: '#ff4d4f', width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }} /> 🎤 Listening...</>}
-            {voiceState === 'TRANSCRIBING'        && <><Loader2 size={14} className="spin" /> 📝 Understanding your speech...</>}
-            {voiceState === 'THINKING'            && <><Loader2 size={14} className="spin" /> 🧠 MirrorMind is thinking...</>}
-            {voiceState === 'SPEAKING'            && <><Volume2 size={14} /> 🔊 MirrorMind is responding...</>}
-            {voiceState === 'ERROR'               && <span>{voiceError}</span>}
+            {voiceState === 'WAKE_LISTENING' && handsFree && <><span style={{ backgroundColor: '#1890ff', width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }} /> ● Listening for "Hello MirrorMind"...</>}
+            {voiceState === 'WAKE_DETECTED' && <><span style={{ backgroundColor: '#52c41a', width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }} /> ● Wake word detected</>}
+            {voiceState === 'GREETING' && <><Volume2 size={14} /> 🔊 MirrorMind is greeting you...</>}
+            {voiceState === 'LISTENING_FOR_QUERY' && <><span style={{ backgroundColor: '#ff4d4f', width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }} /> 🎤 Listening to you...</>}
+            {voiceState === 'TRANSCRIBING' && <><Loader2 size={14} className="spin" /> 📝 Understanding your speech...</>}
+            {voiceState === 'CONFIRMING_TTS' && <><Volume2 size={14} /> 🔊 Asking for confirmation...</>}
+            {voiceState === 'AWAITING_CONFIRMATION' && <><span style={{ backgroundColor: '#fa8c16', width: 8, height: 8, borderRadius: '50%', display: 'inline-block' }} /> ● You said: "{pendingTranscript}" — Should I proceed?</>}
+            {voiceState === 'THINKING' && <><Loader2 size={14} className="spin" /> 🧠 MirrorMind is thinking...</>}
+            {voiceState === 'SPEAKING' && <><Volume2 size={14} /> 🔊 MirrorMind is responding...</>}
+            {voiceState === 'ERROR' && <span>{voiceError}</span>}
           </div>
         )}
 
@@ -733,7 +703,6 @@ export default function Intelligence() {
         </button>
       </form>
 
-      {/* ── Loading / stage progress ── */}
       {loading && (
         <div style={{
           marginBottom: 24, padding: '24px 28px',
@@ -771,7 +740,6 @@ export default function Intelligence() {
         </div>
       )}
 
-      {/* ── Suggested questions ── */}
       {!result && !loading && !error && (
         <div>
           <h3 style={{ fontSize: 13, textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12, letterSpacing: '0.05em' }}>
@@ -793,7 +761,6 @@ export default function Intelligence() {
         </div>
       )}
 
-      {/* ── LLM Response ── */}
       {result && !loading && (
         <div style={{ marginTop: 32, borderTop: '2px dashed var(--border-subtle)', paddingTop: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
@@ -838,3 +805,7 @@ export default function Intelligence() {
     </div>
   );
 }
+"""
+
+with open("frontend/src/components/Intelligence.jsx", "w", encoding="utf-8") as f:
+    f.write(code)

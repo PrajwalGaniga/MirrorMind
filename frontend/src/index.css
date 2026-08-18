@@ -768,3 +768,198 @@ a:hover { transform: scale(0.98); }
   margin: 0;
   white-space: pre-wrap;
 }
+
+/* ── Module 8: Voice State UI ──────────────────────────────────────────────── */
+
+/* Spin utility used by Loader2 icons */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+  display: inline-block;
+}
+
+/* Pulse ring around the mic icon when actively listening */
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(24, 144, 255, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(24, 144, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(24, 144, 255, 0); }
+}
+@keyframes pulse-ring-green {
+  0%   { box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(82, 196, 26, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(82, 196, 26, 0); }
+}
+@keyframes pulse-ring-amber {
+  0%   { box-shadow: 0 0 0 0 rgba(250, 140, 22, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(250, 140, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(250, 140, 22, 0); }
+}
+
+/* Dot that indicates mic status */
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* Reconnecting spinner */
+@keyframes rotate-icon {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Voice State Panel container ────────────────────────────────────────────── */
+.voice-state-panel {
+  border-radius: 14px;
+  border: 2.5px solid #000;
+  background: #fff;
+  box-shadow: 3px 4px 0 rgba(0,0,0,0.10);
+  padding: 18px 20px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.25s, background 0.25s;
+}
+.voice-state-panel.state-listening {
+  border-color: #1890ff;
+  background: rgba(24, 144, 255, 0.04);
+}
+.voice-state-panel.state-detected {
+  border-color: #52c41a;
+  background: rgba(82, 196, 26, 0.05);
+}
+.voice-state-panel.state-speaking {
+  border-color: #722ed1;
+  background: rgba(114, 46, 209, 0.04);
+}
+.voice-state-panel.state-thinking {
+  border-color: #eb2f96;
+  background: rgba(235, 47, 150, 0.04);
+}
+.voice-state-panel.state-confirming {
+  border-color: #fa8c16;
+  background: rgba(250, 140, 22, 0.04);
+}
+.voice-state-panel.state-error {
+  border-color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.04);
+}
+.voice-state-panel.state-reconnecting {
+  border-color: #d48806;
+  background: rgba(212, 136, 6, 0.04);
+}
+
+/* ── State header row ─────────────────────────────────────────────────────── */
+.vsp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vsp-icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.vsp-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+  flex: 1;
+}
+.vsp-sublabel {
+  font-size: 13px;
+  color: #555;
+  font-weight: 500;
+}
+
+/* ── Mic badge ────────────────────────────────────────────────────────────── */
+.mic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 2px solid currentColor;
+  transition: all 0.2s;
+}
+.mic-badge.active {
+  color: #389e0d;
+  background: rgba(82,196,26,0.10);
+  animation: pulse-ring-green 1.8s ease-out infinite;
+}
+.mic-badge.starting {
+  color: #d48806;
+  background: rgba(250,173,20,0.10);
+}
+.mic-badge.off {
+  color: #888;
+  background: rgba(0,0,0,0.04);
+}
+.mic-badge.error {
+  color: #cf1322;
+  background: rgba(255,77,79,0.08);
+}
+.mic-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.mic-badge.active .mic-badge-dot {
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* ── Audio meter bars ─────────────────────────────────────────────────────── */
+.audio-meter {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 32px;
+}
+.audio-meter-bar {
+  width: 5px;
+  border-radius: 3px 3px 0 0;
+  background: #1890ff;
+  transition: height 0.08s ease-out;
+  min-height: 3px;
+}
+
+/* ── Transcript bubble ────────────────────────────────────────────────────── */
+.vsp-transcript {
+  background: rgba(0,0,0,0.04);
+  border: 1.5px solid rgba(0,0,0,0.10);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #222;
+  line-height: 1.5;
+}
+.vsp-transcript strong {
+  color: #111;
+  font-weight: 700;
+}
+
+/* ── Provider badge (inside panel) ───────────────────────────────────────── */
+.vsp-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1.5px solid currentColor;
+}
+.vsp-provider.openrouter { color: #6366f1; background: rgba(99,102,241,0.08); }
+.vsp-provider.ollama     { color: #389e0d; background: rgba(82,196,26,0.08); }
+
+/* ── Reconnecting spinner ─────────────────────────────────────────────────── */
+.vsp-reconnect-icon {
+  display: inline-block;
+  animation: rotate-icon 0.9s linear infinite;
+}
