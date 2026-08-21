@@ -60,7 +60,7 @@ class STTService:
             audio_array = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
             
             pipe = get_stt_pipeline()
-            result = pipe({"raw": audio_array, "sampling_rate": framerate})
+            result = pipe({"raw": audio_array, "sampling_rate": framerate}, generate_kwargs={"language": "english"})
             return result.get("text", "").strip()
             
         except Exception as e:

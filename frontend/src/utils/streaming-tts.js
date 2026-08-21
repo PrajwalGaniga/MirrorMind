@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '../api/axios';
+
 export function cleanTextForSpeech(text) {
   if (!text) return '';
   let cleaned = text;
@@ -76,10 +78,8 @@ class StreamingTTS {
         // Reset timing
         this.nextStartTime = this.audioCtx.currentTime + 0.1;
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // Derive host from api base or current host. Using api/axios host usually.
-        // Hardcoding standard dev port if not found for simplicity:
-        const host = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/^http/, 'ws') : `${protocol}//localhost:8000`;
+        // Derive WebSocket host dynamically from API_BASE_URL (http->ws, https->wss)
+        const host = API_BASE_URL.replace(/^http/, 'ws');
         const wsUrl = `${host}/api/voice/ws/tts`;
 
         this.ws = new WebSocket(wsUrl);

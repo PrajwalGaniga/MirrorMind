@@ -119,6 +119,7 @@ export class WakeRecognitionManager {
     };
 
     rec.onerror = (event) => {
+      if (this._recognition !== rec) return;
       const code = event.error;
       console.warn(`[MIRRORMIND][WAKE_MGR] recognition_error code="${code}"`);
 
@@ -134,6 +135,7 @@ export class WakeRecognitionManager {
     };
 
     rec.onend = () => {
+      if (this._recognition !== rec) return;
       console.log(`[MIRRORMIND][WAKE_MGR] recognition_ended active=${this._active}`);
 
       if (!this._active) return; // intentional stop — don't restart

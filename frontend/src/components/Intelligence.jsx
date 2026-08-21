@@ -8,6 +8,12 @@ import { browserTTS } from '../utils/browser-tts';
 import { WakeRecognitionManager, matchesWakePhrase } from '../utils/wake-recognition';
 import { audioMeter } from '../utils/audio-meter';
 import VoiceStatePanel from './VoiceStatePanel';
+import ActionPanel from './ActionPanel';
+import DocumentViewer from './DocumentViewer';
+import { useActionEngine } from '../hooks/useActionEngine';
+import { detectIntent, isActionIntent } from '../utils/intentDetector';
+import { normalizeCommand } from '../utils/commandNormalizer';
+import { useNavigate } from 'react-router-dom';
 
 // ── Animated dots helper ───────────────────────────────────────────────────
 function AnimatedMessage({ icon, text }) {
@@ -126,6 +132,7 @@ export default function Intelligence() {
   const [elapsedTime, setElapsedTime]     = useState(0);
 
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // ── Voice state machine ──────────────────────────────────────────────────
   const [handsFree, setHandsFree]               = useState(false);
@@ -133,6 +140,30 @@ export default function Intelligence() {
   const [wakeStatus, setWakeStatus]             = useState('STOPPED'); // ACTIVE | RECONNECTING | STOPPED | MIC_ERROR
   const [voiceError, setVoiceError]             = useState('');
   const [pendingTranscript, setPendingTranscript] = useState('');
+  
+  const [voiceDiagnostics, setVoiceDiagnostics] = useState(null);
+
+  // ── Action Engine ────────────────────────────────────────────────────────
+  const startRecordingRef = useRef(null);
+  
+  const engine = useActionEngine({
+    navigate,
+    user,
+    onSpeak: async (text, expectedState) => {
+      try { await browserTTS.speak(text); } catch (err) {}
+      if (handsFreeRef.current) {
+         const vState = expectedState || voiceStateRef.current;
+         if (vState === 'ACTION_COLLECTING') {
+            startRecordingRef.current?.(true);
+         } else if (vState === 'ACTION_PREVIEW') {
+            wakeRecMgrRef.current?.start('confirm');
+         } else if (vState === 'WAKE_LISTENING' || vState === 'IDLE') {
+            wakeRecMgrRef.current?.start('wake');
+         }
+      }
+    },
+    onSetVoiceState: setVoiceState,
+  });
 
   // ── Refs ────────────────────────────────────────────────────────────────
   const recorderRef          = useRef(null);
@@ -146,6 +177,7 @@ export default function Intelligence() {
   const handsFreeRef         = useRef(handsFree);
   const pendingTranscriptRef = useRef(pendingTranscript);
   const providerRef          = useRef(provider);
+  const activeActionRef      = useRef(engine.activeAction);
 
   useEffect(() => { voiceStateRef.current = voiceState;
     console.log(`[MIRRORMIND][VOICE] state=${voiceState}`);
@@ -153,6 +185,7 @@ export default function Intelligence() {
   useEffect(() => { handsFreeRef.current = handsFree; },         [handsFree]);
   useEffect(() => { pendingTranscriptRef.current = pendingTranscript; }, [pendingTranscript]);
   useEffect(() => { providerRef.current = provider; },           [provider]);
+  useEffect(() => { activeActionRef.current = engine.activeAction; }, [engine.activeAction]);
 
   // ── Wake recognition result handler ─────────────────────────────────────
   // Defined with useCallback so it's stable across renders.
@@ -164,7 +197,7 @@ export default function Intelligence() {
         console.log(`[MIRRORMIND][VOICE] wake_word_detected transcript="${transcript}"`);
         handleWakeWordDetected();
       }
-    } else if (mode === 'confirm' && currentState === 'AWAITING_CONFIRMATION') {
+    } else if (mode === 'confirm' && (currentState === 'AWAITING_CONFIRMATION' || currentState === 'ACTION_PREVIEW' || currentState === 'AWAITING_ACTION_CONFIRM')) {
       console.log(`[MIRRORMIND][VOICE] confirmation_received="${transcript}"`);
       handleConfirmation(transcript);
     }
@@ -231,12 +264,16 @@ export default function Intelligence() {
     setResult(null);
     setQuestion('');
     setPendingTranscript('');
+    setVoiceDiagnostics(null);
 
     // Small visual pause so "Wake word detected" is visible
     await new Promise(r => setTimeout(r, 500));
     if (!handsFreeRef.current) return; // user may have toggled off
 
-    const greetingText = `Hello ${user?.name || 'there'}. How can I help you?`;
+    const fullName   = user?.name || 'there';
+    const firstName  = fullName.split(' ')[0];   // "Prajwal Ganiga" → "Prajwal"
+    const greetingText = `Hello ${firstName}. How can I help you?`;
+
     setVoiceState('GREETING');
 
     try {
@@ -253,6 +290,7 @@ export default function Intelligence() {
 
   // ── Start recording user query ────────────────────────────────────────────
   const startRecording = async (useSilenceDetection = false) => {
+    startRecordingRef.current = startRecording;
     try {
       setVoiceError('');
       setVoiceState('LISTENING_FOR_QUERY');
@@ -302,19 +340,32 @@ export default function Intelligence() {
       const transcribedText = res.data.text.trim();
       console.log(`[MIRRORMIND][VOICE] transcript="${transcribedText}"`);
 
+      const currentAction = activeActionRef.current;
+      const isCollecting = currentAction && currentAction.status === 'COLLECTING';
+
       // Guard against capturing the wake phrase itself or very short/noise clips
       const clean = transcribedText.toLowerCase().replace(/[^\w\s]/g, '').trim();
-      const isTooShort     = clean.length < 3;
-      const isNoise        = ['yes', 'okay', 'ok', 'thank you', 'thanks', 'hello', 'bye', 'yep', 'yup', 'no'].includes(clean);
+      const isTooShort     = clean.length < 3 && !['ok', 'no', 'hi'].includes(clean);
+      const isNoise        = [
+        'yes', 'okay', 'ok', 'thank you', 'thanks', 'hello', 'bye', 'yep', 'yup', 'no',
+        'okay prashva', 'thanks for watching', 'subscribe', 'thank you for watching',
+        'you', 'yeah'
+      ].includes(clean);
       const isWakePhraseItself = matchesWakePhrase(clean);
 
       if (isTooShort || isNoise || isWakePhraseItself) {
-        console.log(`[MIRRORMIND][VOICE] transcript_valid=false reason=${isWakePhraseItself ? 'wake_phrase' : 'too_short_or_noise'}`);
+        console.log(`[MIRRORMIND][VOICE] transcript_valid=false reason=${isWakePhraseItself ? 'wake_phrase' : 'too_short_or_noise'} text="${clean}"`);
         if (handsFreeRef.current) {
-          await speakBrowser("I didn't catch a question. Please try again.", 'ERROR');
-          returnToWakeListening();
+          if (isCollecting) {
+            setVoiceState('ACTION_COLLECTING');
+            try { await browserTTS.speak("I didn't catch that clearly. Could you repeat your answer?"); } catch(e){}
+            startRecording(true);
+          } else {
+            await speakBrowser("I didn't catch a question. Please try again.", 'ERROR');
+            returnToWakeListening();
+          }
         } else {
-          throw new Error('Invalid or empty question detected.');
+          throw new Error('Invalid or empty audio detected.');
         }
         return;
       }
@@ -322,8 +373,53 @@ export default function Intelligence() {
       console.log(`[MIRRORMIND][VOICE] transcript_valid=true`);
       setQuestion(transcribedText);
       setPendingTranscript(transcribedText);
+      
+      if (isCollecting) {
+         // Feed directly to handleAsk to process step, skipping RAG routing
+         console.log(`[MIRRORMIND][VOICE] currently collecting, bypassing routing`);
+         handleAsk(null, transcribedText);
+         return;
+      }
+
+      // --- MODULE 9.1: EARLY INTENT DETECTION FOR ROUTING ---
+      const intentResult = detectIntent(transcribedText);
+      
+      setVoiceDiagnostics({
+        rawTranscript: transcribedText,
+        normalizedText: normalizeCommand(transcribedText),
+        intent: intentResult.intent,
+        confidence: intentResult.confidence,
+        suggestion: intentResult.suggestion,
+      });
 
       if (handsFreeRef.current) {
+        // If it's a known action, skip the generic "You said X. Should I proceed?"
+        // and go straight to execution (the Action Engine will do its own preview/confirm).
+        if (isActionIntent(intentResult.intent)) {
+          console.log(`[MIRRORMIND][VOICE] routing directly to action: ${intentResult.intent}`);
+          handleAsk(null, transcribedText);
+          return;
+        }
+
+        // If it's UNKNOWN but we have a fuzzy suggestion, ask about the suggestion
+        if (intentResult.intent === 'UNKNOWN' && intentResult.suggestion) {
+          const confText = `I didn't catch that clearly. Did you want me to ${intentResult.suggestion}?`;
+          setVoiceState('CONFIRMING_TTS');
+          try { await browserTTS.speak(confText); } catch(e){}
+          setVoiceState('AWAITING_CONFIRMATION');
+          wakeRecMgrRef.current?.start('confirm');
+          // Start timeout
+          confTimeoutRef.current = setTimeout(async () => {
+            if (voiceStateRef.current === 'AWAITING_CONFIRMATION') {
+              wakeRecMgrRef.current?.stop();
+              try { await browserTTS.speak("I'll wait. Say Hello MirrorMind whenever you need me."); } catch(_) {}
+              returnToWakeListening();
+            }
+          }, 10000);
+          return;
+        }
+
+        // Fallback for Information Query
         const confText = `You said: ${transcribedText}. Should I proceed?`;
         setVoiceState('CONFIRMING_TTS');
         try {
@@ -368,6 +464,11 @@ export default function Intelligence() {
     if (confTimeoutRef.current) clearTimeout(confTimeoutRef.current);
     wakeRecMgrRef.current?.stop();
 
+    if (engine.activeAction && engine.activeAction.status === 'PREVIEW') {
+       await engine.handleConfirmationInput(transcript);
+       return;
+    }
+
     const yesWords = ['yes', 'yeah', 'okay', 'ok', 'sure', 'go ahead', 'proceed', 'tell me', 'ask', 'continue', 'do it'];
     const noWords  = ['no', 'cancel', 'stop', 'not now', 'dont', 'do not'];
 
@@ -380,8 +481,17 @@ export default function Intelligence() {
       returnToWakeListening();
     } else if (hasYes) {
       console.log(`[MIRRORMIND][VOICE] confirmed=true`);
-      // Use the stored transcript — NOT the "yes" word itself
-      handleAsk(null, pendingTranscriptRef.current);
+      
+      // If we confirmed a suggestion, use that instead of the raw transcript
+      const currentDiagnostics = setVoiceDiagnostics((prev) => {
+         if (prev && prev.intent === 'UNKNOWN' && prev.suggestion) {
+            handleAsk(null, prev.suggestion);
+         } else {
+            handleAsk(null, pendingTranscriptRef.current);
+         }
+         return prev; // don't actually mutate state here, just use the value
+      });
+      // We read it via updater to avoid stale closures, handleAsk is called inside
     } else {
       // Unclear — ask again
       setVoiceState('CONFIRMING_TTS');
@@ -439,10 +549,92 @@ export default function Intelligence() {
   };
 
   // ── Main ask handler ──────────────────────────────────────────────────────
+  const handleAction = async (intentResult) => {
+    const { intent, payload } = intentResult;
+
+    if (intent === 'NAVIGATE') {
+      await engine.startAction(intent, payload);
+      return;
+    }
+
+    if (intent === 'CLOSE_DOCUMENT') {
+      engine.closeDocument();
+      return;
+    }
+
+    if (intent === 'OPEN_DOCUMENT') {
+      try {
+        const { data: docs } = await api.get('/api/documents');
+        const res = engine.handleDocumentOpen(payload.query, docs);
+        if (res.found) {
+          await engine.startAction(intent, { ...payload, doc: res.doc });
+        } else if (res.candidates?.length > 1) {
+          try { await browserTTS.speak("I found multiple matching documents."); } catch(err){}
+        } else {
+          try { await browserTTS.speak("I couldn't find a matching document."); } catch(err){}
+        }
+      } catch (err) {
+        try { await browserTTS.speak("Failed to load documents."); } catch(err){}
+      }
+      return;
+    }
+
+    if (intent === 'EDIT_PROFILE') {
+      try {
+         const { data: prof } = await api.get('/api/students/profile');
+         await engine.startAction(intent, payload, prof);
+      } catch (err) {}
+      return;
+    }
+
+    await engine.startAction(intent, payload);
+  };
+
   const handleAsk = async (e, customQuestion = null, overrideProvider = null) => {
     if (e) e.preventDefault();
     const q = customQuestion || question;
     if (!q.trim() || loading) return;
+
+    // Use ref to avoid stale closures from event listeners
+    const currentAction = activeActionRef.current;
+
+    // 1. Classify intent first
+    const intentResult = detectIntent(q);
+
+    // If we are currently collecting an action
+    if (currentAction && currentAction.status === 'COLLECTING') {
+       if (isActionIntent(intentResult.intent)) {
+          const res = await engine.handleInterruption(intentResult.intent, intentResult.payload);
+          if (res.interrupted) return;
+       }
+       setQuestion('');
+       setPendingTranscript('');
+       await engine.submitStep(q);
+       return;
+    }
+
+    // If we are in PREVIEW and they typed something, treat as confirmation input
+    if (currentAction && currentAction.status === 'PREVIEW') {
+       setQuestion('');
+       setPendingTranscript('');
+       await engine.handleConfirmationInput(q);
+       return;
+    }
+
+    if (intentResult.intent === 'UNKNOWN') {
+       setQuestion('');
+       setPendingTranscript('');
+       const msg = "I didn't understand that as an action. Did you want to add a project, open a document, edit your profile, or something else?";
+       try { await browserTTS.speak(msg); } catch (e) {}
+       if (handsFreeRef.current) returnToWakeListening();
+       return;
+    }
+
+    if (intentResult.intent !== 'INFORMATION_QUERY') {
+       setQuestion('');
+       setPendingTranscript('');
+       return handleAction(intentResult);
+    }
 
     console.log(`[MIRRORMIND][VOICE] sending_to_intelligence=true question="${q.substring(0, 80)}"`);
     const activeProvider = overrideProvider || providerRef.current;
@@ -640,6 +832,7 @@ export default function Intelligence() {
           pendingTranscript={pendingTranscript}
           provider={provider}
           voiceError={voiceError}
+          diagnostics={voiceDiagnostics}
         />
       )}
 
@@ -672,6 +865,18 @@ export default function Intelligence() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Action Panel ── */}
+      {engine.activeAction && (
+        <ActionPanel
+          activeAction={engine.activeAction}
+          onSubmitStep={engine.submitStep}
+          onCancel={() => engine.cancelAction(false)}
+          onConfirm={engine.confirmAction}
+          onConfirmInput={engine.handleConfirmationInput}
+          handsFree={handsFree}
+        />
       )}
 
       {/* ── Query form ── */}
@@ -835,6 +1040,8 @@ export default function Intelligence() {
           )}
         </div>
       )}
+      {/* ── Document Viewer ── */}
+      <DocumentViewer document={engine.openDocument} onClose={engine.closeDocument} />
     </div>
   );
 }

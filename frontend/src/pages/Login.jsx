@@ -20,7 +20,14 @@ export default function Login() {
       login(data.token, data.user);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+      console.error('[LOGIN ERROR]', err);
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
+      } else if (err.message === 'Network Error' || !err.response) {
+        setError(`Connection failed: Cannot reach backend server at ${api.defaults.baseURL || 'localhost:8000'}. Check if the server or ngrok tunnel is online.`);
+      } else {
+        setError(err.message || 'Login failed. Please try again.');
+      }
     } finally { setLoading(false); }
   };
 

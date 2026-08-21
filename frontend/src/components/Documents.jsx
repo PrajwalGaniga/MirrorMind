@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import api from '../api/axios';
+import api, { API_BASE_URL } from '../api/axios';
 
 export default function Documents() {
   const [documents, setDocuments] = useState([]);
@@ -91,9 +91,10 @@ export default function Documents() {
     }
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/documents/${doc._id}/download`, {
+      const response = await fetch(`${API_BASE_URL}/api/documents/${doc._id}/download`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'ngrok-skip-browser-warning': 'true'
         }
       });
       

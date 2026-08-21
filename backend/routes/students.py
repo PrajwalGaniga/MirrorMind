@@ -4,7 +4,7 @@ from typing import Optional, List
 from datetime import datetime
 from db import get_db
 from auth_utils import get_current_user
-from models.student import StudentProfile, InternshipProfile, ProjectProfile
+from models.student import StudentProfile, InternshipProfile, ProjectProfile, ProfileUpdateRequest
 from models.db_models import Student, Internship, Project, SemesterRecord, SubjectMark
 
 router = APIRouter()
@@ -84,11 +84,30 @@ async def save_profile(
 
     if student_dict:
         update_doc = {**base_data, "predictions": None, "updated_at": datetime.utcnow()}
-        await db.students.update_one({"user_id": user_id}, {"$set": update_doc})
+        result = await db.students.update_one(
+            {"user_id": user_id},
+            {"$set": update_doc}
+        )
         student_id = student_dict.get("id")
+
+        print(
+            f"[MIRRORMIND][PROFILE]\n"
+            f"user_id={user_id}\n"
+            f"operation=UPDATE\n"
+            f"fields_updated={list(base_data.keys())}\n"
+            f"matched_count={result.matched_count}\n"
+            f"modified_count={result.modified_count}\n"
+        )
+
+        if result.matched_count == 0:
+            # Document not found by user_id — should not happen, but handle defensively
+            raise HTTPException(
+                status_code=404,
+                detail="Profile not found. Please complete onboarding first."
+            )
     else:
         new_student = Student(**base_data, user_id=user_id)
-        
+
         for internship_data in profile.internships:
             new_student.internships.append(Internship(**internship_data.dict()))
 
@@ -107,7 +126,30 @@ async def save_profile(
         await db.students.insert_one(student_doc)
         student_id = new_student.id
 
-    return {"student_id": student_id, "message": "Profile saved successfully"}
+        print(
+            f"[MIRRORMIND][PROFILE]\n"
+            f"user_id={user_id}\n"
+            f"operation=INSERT\n"
+            f"student_id={student_id}\n"
+        )
+
+    # Always re-fetch and return the actual persisted document
+    persisted = await db.students.find_one({"user_id": user_id})
+    if not persisted:
+        raise HTTPException(status_code=500, detail="Profile persistence verification failed.")
+
+    print(
+        f"[MIRRORMIND][PROFILE]\n"
+        f"PERSISTENCE VERIFIED\n"
+        f"profile_reload_success=true\n"
+        f"profile_fields={list(persisted.keys())}\n"
+    )
+
+    return {
+        "student_id": student_id,
+        "message": "Profile saved successfully",
+        "profile": await _serialize(persisted, db),
+    }
 
 
 @router.get("/profile")
@@ -115,7 +157,83 @@ async def get_profile(user_id: str = Depends(get_current_user), db = Depends(get
     student = await db.students.find_one({"user_id": user_id})
     if not student:
         raise HTTPException(status_code=404, detail="Profile not found")
+    print(
+        f"[MIRRORMIND][PROFILE]\n"
+        f"GET_PROFILE\n"
+        f"user_id={user_id}\n"
+        f"profile_found=true\n"
+        f"profile_fields={list(student.keys())}\n"
+    )
     return await _serialize(student, db)
+
+
+@router.patch("/profile/update")
+async def update_profile_fields(
+    data: ProfileUpdateRequest,
+    user_id: str = Depends(get_current_user),
+    db = Depends(get_db),
+):
+    """
+    Safe partial update for profile scalar fields.
+    Only fields explicitly provided are written to MongoDB.
+    internships / projects / semester_records are NEVER touched by this endpoint.
+    """
+    # Build $set dict from only the non-None fields
+    fields_to_update = {
+        k: v for k, v in data.dict().items() if v is not None
+    }
+
+    if not fields_to_update:
+        # Nothing to update — still return the current persisted profile
+        student = await db.students.find_one({"user_id": user_id})
+        if not student:
+            raise HTTPException(status_code=404, detail="Profile not found")
+        return {"message": "No changes submitted", "profile": await _serialize(student, db)}
+
+    fields_to_update["updated_at"] = datetime.utcnow()
+    fields_to_update["predictions"] = None  # invalidate cached predictions on any profile change
+
+    print(
+        f"[MIRRORMIND][PROFILE]\n"
+        f"PATCH_UPDATE REQUEST\n"
+        f"user_id={user_id}\n"
+        f"fields_updated={list(fields_to_update.keys())}\n"
+    )
+
+    result = await db.students.update_one(
+        {"user_id": user_id},
+        {"$set": fields_to_update}
+    )
+
+    print(
+        f"[MIRRORMIND][PROFILE]\n"
+        f"MONGO UPDATE\n"
+        f"matched_count={result.matched_count}\n"
+        f"modified_count={result.modified_count}\n"
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Profile not found. Please complete onboarding first."
+        )
+
+    # Re-fetch and return the actual persisted document
+    persisted = await db.students.find_one({"user_id": user_id})
+    if not persisted:
+        raise HTTPException(status_code=500, detail="Profile persistence verification failed.")
+
+    print(
+        f"[MIRRORMIND][PROFILE]\n"
+        f"PERSISTENCE VERIFIED\n"
+        f"profile_reload_success=true\n"
+    )
+
+    return {
+        "message": "Profile updated successfully",
+        "modified_count": result.modified_count,
+        "profile": await _serialize(persisted, db),
+    }
 
 
 @router.patch("/profile/avatar")

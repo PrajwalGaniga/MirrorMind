@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+from typing import Any
 
 class InternshipProfile(BaseModel):
     company_name: str
@@ -49,3 +50,22 @@ class StudentProfile(BaseModel):
     internships: List[InternshipProfile] = []
     projects: List[ProjectProfile] = []
     semester_records: List[SemesterRecordProfile] = []
+
+
+class ProfileUpdateRequest(BaseModel):
+    """All-optional model for partial profile updates.
+    Only the fields that are explicitly provided will be written to MongoDB.
+    internships / projects / semester_records are intentionally excluded
+    so a scalar-only update never erases array data.
+    """
+    name: Optional[str] = None
+    branch: Optional[str] = None
+    semester: Optional[int] = None
+    college_tier: Optional[str] = None
+    cgpa: Optional[float] = None
+    backlog_count: Optional[int] = None
+    skills: Optional[List[str]] = None
+    certifications: Optional[List[Any]] = None
+    career_interest: Optional[str] = None
+    communication_rating: Optional[int] = None
+    work_style_pref: Optional[str] = None

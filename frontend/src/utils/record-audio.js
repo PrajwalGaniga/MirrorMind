@@ -1,6 +1,11 @@
 /**
  * Captures raw audio from the microphone and converts it to a 16kHz 16-bit Mono WAV Blob.
  * This bypasses the need for ffmpeg on the backend by avoiding WebM format.
+ *
+ * Module 9.1: Enhanced silence detection for short command reliability.
+ * - minRecordingMs: ignore silence for the first N ms (prevents premature cutoff)
+ * - speechDetected: only start silence countdown AFTER speech is heard
+ * - Structured logging for diagnostics
  */
 export class AudioRecorder {
   constructor() {
@@ -16,11 +21,13 @@ export class AudioRecorder {
     this.onSilence = null;
     this.onMaxDuration = null;
     this.silenceThreshold = 0.01; // RMS threshold
-    this.silenceDuration = 1500; // ms of silence before triggering
+    this.silenceDuration = 1800; // ms of silence AFTER speech before triggering (Module 9.1: raised from 1500)
     this.maxDuration = 30000; // ms of max recording
+    this.minRecordingMs = 1200; // Module 9.1: minimum recording window before silence detection activates
     this.silenceStart = null;
     this.startTime = null;
     this.stopped = false;
+    this.speechDetected = false; // Module 9.1: tracks whether user has actually spoken
   }
 
   async start() {
@@ -29,6 +36,7 @@ export class AudioRecorder {
     this.stopped = false;
     this.startTime = null;
     this.silenceStart = null;
+    this.speechDetected = false;
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
@@ -43,6 +51,8 @@ export class AudioRecorder {
     // Create a ScriptProcessorNode with a bufferSize of 4096 and a single input and output channel
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     
+    console.log('[MIRRORMIND][VOICE][COMMAND] recording_started=true');
+
     this.processor.onaudioprocess = (e) => {
       if (this.stopped) return;
       
@@ -63,20 +73,32 @@ export class AudioRecorder {
         const now = Date.now();
         
         if (!this.startTime) this.startTime = now;
+        const elapsed = now - this.startTime;
         
         // Max duration check
-        if (this.onMaxDuration && (now - this.startTime) >= this.maxDuration) {
+        if (this.onMaxDuration && elapsed >= this.maxDuration) {
           this.stopped = true;
+          console.log('[MIRRORMIND][VOICE][COMMAND] recording_stopped=true reason=max_duration');
           this.onMaxDuration();
           return;
         }
         
-        // Silence detection check
-        if (this.onSilence) {
+        // Track whether speech has been detected (any frame above threshold)
+        if (!this.speechDetected && rms >= this.silenceThreshold) {
+          this.speechDetected = true;
+          console.log(`[MIRRORMIND][VOICE][COMMAND] speech_detected=true elapsed=${elapsed}ms`);
+        }
+
+        // Silence detection — ONLY activates when BOTH conditions are met:
+        // 1. Minimum recording time has passed (minRecordingMs)
+        // 2. Speech has been detected at least once
+        if (this.onSilence && elapsed >= this.minRecordingMs && this.speechDetected) {
           if (rms < this.silenceThreshold) {
             if (!this.silenceStart) this.silenceStart = now;
             else if (now - this.silenceStart >= this.silenceDuration) {
               this.stopped = true;
+              console.log(`[MIRRORMIND][VOICE][COMMAND] silence_detected=true duration=${this.silenceDuration}ms`);
+              console.log('[MIRRORMIND][VOICE][COMMAND] recording_stopped=true reason=silence');
               this.onSilence();
             }
           } else {

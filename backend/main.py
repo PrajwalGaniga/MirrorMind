@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_db, setup_indexes
 import models.db_models
-from routes import auth, students, predict, developer, uploads, settings, extension, documents, retrieval, intelligence, voice
+from routes import auth, students, predict, developer, uploads, settings, extension, documents, retrieval, intelligence, voice, actions
 
 app = FastAPI(title="MirrorMind API", version="1.0.0")
 
@@ -10,9 +10,20 @@ app = FastAPI(title="MirrorMind API", version="1.0.0")
 async def startup_event():
     await setup_indexes()
 
+# Allowed Origins for CORS
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",                            # React Vite Frontend (Local)
+    "http://localhost:3000",                            # React CRA / Next.js (Local)
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "https://dawdlingly-pseudoinsane-pa.ngrok-free.dev", # ngrok Public Tunnel
+    "https://mirrormindai.vercel.app",                  # Vercel Production Frontend
+    "*",                                                # Wildcard fallback
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +40,7 @@ app.include_router(documents.router, prefix="/api/documents", tags=["Documents"]
 app.include_router(retrieval.router, prefix="/api/retrieval", tags=["Retrieval"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["Intelligence"])
 app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])
+app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
 
 @app.get("/")
 def root():

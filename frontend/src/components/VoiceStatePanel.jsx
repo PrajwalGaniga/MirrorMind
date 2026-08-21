@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Loader2, Cloud, Monitor } from 'lucide-react';
 import { audioMeter } from '../utils/audio-meter';
+import VoiceDiagnosticsPanel from './VoiceDiagnosticsPanel';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const BAR_COUNT = 10;
@@ -20,6 +21,10 @@ function panelClass(voiceState, wakeStatus) {
   if (voiceState === 'THINKING') return 'state-thinking';
   if (voiceState === 'SPEAKING') return 'state-speaking';
   if (voiceState === 'SPEECH_PAUSED') return 'state-confirming';
+  if (voiceState === 'ACTION_COLLECTING') return 'state-action-collect';
+  if (voiceState === 'ACTION_PREVIEW') return 'state-action-preview';
+  if (voiceState === 'AWAITING_ACTION_CONFIRM') return 'state-confirming';
+  if (voiceState === 'ACTION_EXECUTING') return 'state-thinking';
   return '';
 }
 
@@ -111,6 +116,7 @@ function ProviderTag({ provider }) {
  *   pendingTranscript string  — transcript waiting for confirmation
  *   provider          string  — 'openrouter' | 'ollama'
  *   voiceError        string  — error message when voiceState === 'ERROR'
+ *   diagnostics       object  — voice pipeline debug info
  */
 export default function VoiceStatePanel({
   voiceState,
@@ -118,10 +124,12 @@ export default function VoiceStatePanel({
   pendingTranscript,
   provider,
   voiceError,
+  diagnostics
 }) {
   const meterActive =
     voiceState === 'WAKE_LISTENING' ||
-    voiceState === 'LISTENING_FOR_QUERY';
+    voiceState === 'LISTENING_FOR_QUERY' ||
+    voiceState === 'ACTION_COLLECTING';
 
   const reconnecting =
     voiceState === 'WAKE_LISTENING' && wakeStatus === 'RECONNECTING';
@@ -176,6 +184,24 @@ export default function VoiceStatePanel({
           );
         }
         break;
+      case 'ACTION_COLLECTING':
+        icon = '📝';
+        label = 'MirrorMind is taking notes…';
+        sublabel = 'Speak your answer';
+        break;
+      case 'ACTION_PREVIEW':
+        icon = '🔊';
+        label = 'Reading back your action…';
+        break;
+      case 'AWAITING_ACTION_CONFIRM':
+        icon = '❓';
+        label = 'Ready to save?';
+        sublabel = 'Say "yes" to confirm or "no" to cancel';
+        break;
+      case 'ACTION_EXECUTING':
+        icon = <Loader2 size={20} className="spin" />;
+        label = 'Saving your changes…';
+        break;
       case 'THINKING':
         icon = <Loader2 size={20} className="spin" />;
         label = 'MirrorMind is thinking…';
@@ -203,27 +229,31 @@ export default function VoiceStatePanel({
   }
 
   return (
-    <div className={`voice-state-panel ${pClass}`} role="status" aria-live="polite">
-      {/* Header row: icon + label + mic badge */}
-      <div className="vsp-header">
-        <span className="vsp-icon">{icon}</span>
-        <div style={{ flex: 1 }}>
-          <div className="vsp-label">{label}</div>
-          {sublabel && <div className="vsp-sublabel">{sublabel}</div>}
+    <div>
+      <div className={`voice-state-panel ${pClass}`} role="status" aria-live="polite">
+        {/* Header row: icon + label + mic badge */}
+        <div className="vsp-header">
+          <span className="vsp-icon">{icon}</span>
+          <div style={{ flex: 1 }}>
+            <div className="vsp-label">{label}</div>
+            {sublabel && <div className="vsp-sublabel">{sublabel}</div>}
+          </div>
+          <MicBadge status={
+            voiceState === 'ERROR' && wakeStatus === 'MIC_ERROR' ? 'MIC_ERROR' :
+            meterActive ? 'ACTIVE' :
+            reconnecting ? 'RECONNECTING' :
+            wakeStatus
+          } />
         </div>
-        <MicBadge status={
-          voiceState === 'ERROR' && wakeStatus === 'MIC_ERROR' ? 'MIC_ERROR' :
-          meterActive ? 'ACTIVE' :
-          reconnecting ? 'RECONNECTING' :
-          wakeStatus
-        } />
+
+        {/* Live audio meter — only when mic is actually open */}
+        {meterActive && <AudioMeter active={meterActive} />}
+
+        {/* Extra content (transcript, provider badge) */}
+        {extraContent}
       </div>
-
-      {/* Live audio meter — only when mic is actually open */}
-      {meterActive && <AudioMeter active={meterActive} />}
-
-      {/* Extra content (transcript, provider badge) */}
-      {extraContent}
+      
+      {diagnostics && <VoiceDiagnosticsPanel diagnostics={diagnostics} />}
     </div>
   );
 }

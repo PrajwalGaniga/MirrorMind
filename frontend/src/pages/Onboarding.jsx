@@ -24,6 +24,7 @@ export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
   const [loading, setLoading] = useState(false);
   const [allSkills, setAllSkills] = useState([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
@@ -86,7 +87,7 @@ export default function Onboarding() {
   const back = () => { setError(''); setStep(s => s - 1); };
 
   const submit = async () => {
-    setError(''); setLoading(true);
+    setError(''); setLoading(true); setSaveStatus('saving');
     try {
       const payload = {
         ...form,
@@ -96,14 +97,32 @@ export default function Onboarding() {
         communication_rating: parseInt(form.communication_rating) || 7,
       };
       const { data } = await api.post('/api/students/profile', payload);
+
+      // Verify the backend returned a persisted profile document
+      if (!data.profile) {
+        throw new Error('Backend did not return a persisted profile. Please try again.');
+      }
+
+      console.log('[MIRRORMIND][PROFILE] Persistence confirmed:', {
+        name: data.profile.name,
+        cgpa: data.profile.cgpa,
+        branch: data.profile.branch,
+        skills_count: data.profile.skills?.length ?? 0,
+        projects_count: data.profile.projects_count ?? 0,
+        internships_count: data.profile.internship_count ?? 0,
+      });
+
       localStorage.setItem('student_id', data.student_id);
-      
+      setSaveStatus('saved');
+
       // Run ML prediction in background without blocking UI
       api.get('/api/predict').catch(() => {});
-      
-      navigate('/dashboard');
+
+      // Brief confirmation before navigating
+      setTimeout(() => navigate('/dashboard'), 800);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Submission failed. Please try again.');
+      setSaveStatus('error');
+      setError(err.response?.data?.detail || err.message || 'Submission failed. Please try again.');
     } finally { setLoading(false); }
   };
 
@@ -263,8 +282,11 @@ export default function Onboarding() {
             </div>
             <div className="step-actions" style={{ marginTop: 28 }}>
               <button className="btn btn-ghost" onClick={back}>← Back</button>
-              <button id="submit-profile-btn" className="btn btn-primary" onClick={submit} disabled={loading}>
-                {loading ? '⏳ Submitting…' : '🚀 Submit & Predict'}
+              <button id="submit-profile-btn" className="btn btn-primary" onClick={submit} disabled={loading || saveStatus === 'saving' || saveStatus === 'saved'}>
+                {saveStatus === 'saving' ? '⏳ Saving profile…'
+                  : saveStatus === 'saved' ? '✅ Saved — redirecting…'
+                  : loading ? '⏳ Submitting…'
+                  : '🚀 Submit & Predict'}
               </button>
             </div>
           </>

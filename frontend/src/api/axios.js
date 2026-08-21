@@ -1,15 +1,26 @@
 import axios from 'axios';
 import { devLogger } from '../utils/logger';
 
-const USE_NGROK = false; // Set to false to use localhost
+// ============================================================================
+// Backend Connection Configuration
+// ============================================================================
+// Toggle USE_NGROK to true for ngrok, or use VITE_API_URL in .env
+const USE_NGROK = true; 
 
-const LOCAL_URL = 'http://localhost:8000';
-const NGROK_URL = 'https://dawdlingly-pseudoinsane-pa.ngrok-free.dev';
+export const LOCAL_URL = 'http://localhost:8000';
+export const NGROK_URL = 'https://dawdlingly-pseudoinsane-pa.ngrok-free.dev';
+
+// Priority: 1. Environment variable (e.g. Vercel) -> 2. USE_NGROK toggle -> 3. Localhost
+export const API_BASE_URL = 
+  import.meta.env.VITE_API_URL || 
+  (USE_NGROK ? NGROK_URL : LOCAL_URL);
+
+console.log(`[MIRRORMIND][API] Connected to backend at: ${API_BASE_URL}`);
 
 const api = axios.create({
-  baseURL: USE_NGROK ? NGROK_URL : LOCAL_URL,
+  baseURL: API_BASE_URL,
   headers: {
-    // Add header to skip ngrok's browser warning page
+    // Skip ngrok browser interstitial warning screen for API calls
     'ngrok-skip-browser-warning': 'true',
   }
 });
