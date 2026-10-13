@@ -347,7 +347,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
     primary_api_key = api_keys[0]
     live_model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-latest")
-    client = genai.Client(api_key=primary_api_key, http_options={"api_version": "v1alpha"})
+    client = genai.Client(api_key=primary_api_key, http_options={"api_version": "v1beta"})
 
     # Session State
     latest_resumption_handle: Optional[str] = None
@@ -358,6 +358,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
     has_greeted = False
     evaluation_generated = False
     session_evaluation: Optional[Dict[str, Any]] = None
+    session_ended = asyncio.Event()
 
     # Telemetry
     turn_counter = 0
@@ -377,13 +378,38 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
     audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
 
+    # ── Tool execution helper for Interview ───────────────────────────────────
+    async def execute_interview_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        t_tool_start = time.time()
+        _vlog(session_id, "TOOL_START", f"Executing interview tool: {name}", args)
+        try:
+            if name == "end_interview":
+                _vlog(session_id, "TOOL_END_INTERVIEW", "Model requested end_interview.")
+                session_ended.set()
+                await websocket.send_json({
+                    "type": "UI_ACTION",
+                    "action": "END_INTERVIEW",
+                    "message": "Interview concluded."
+                })
+                elapsed = (time.time() - t_tool_start) * 1000
+                _vlog(session_id, "TOOL_DONE", f"end_interview handled in {elapsed:.1f}ms")
+                return {"status": "success", "message": "Interview concluding."}
+            else:
+                elapsed = (time.time() - t_tool_start) * 1000
+                _vlog(session_id, "TOOL_UNKNOWN", f"Unknown interview tool: {name} ({elapsed:.1f}ms)")
+                return {"status": "error", "message": f"Unknown interview tool: {name}"}
+        except Exception as tool_err:
+            elapsed = (time.time() - t_tool_start) * 1000
+            _vlog(session_id, "TOOL_ERROR", f"{name} error: {tool_err} ({elapsed:.1f}ms)")
+            return {"status": "error", "message": str(tool_err)}
+
     # ── Task 1: Browser -> Audio Queue & Control Messages ────────────────────
     async def browser_to_queue():
         nonlocal t_speech_ended, turn_counter, t_turn_start, has_greeted
         use_manual_vad = os.getenv("USE_MANUAL_VAD", "false").lower() == "true"
         _turn_cand_chunks = 0
         try:
-            while True:
+            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
                 msg = await websocket.receive()
                 if "bytes" in msg and msg["bytes"]:
                     pcm_chunk = msg["bytes"]
@@ -397,8 +423,8 @@ async def interview_websocket_proxy(websocket: WebSocket):
                         stats["dropped_chunks"] += 1
                         try:
                             audio_queue.get_nowait()
-                        except Exception:
-                            pass
+                        except Exception as q_err:
+                            _vlog(session_id, "QUEUE_WARN", f"Dropped oldest chunk: {q_err}")
                         audio_queue.put_nowait(pcm_chunk)
 
                 elif "text" in msg and msg["text"]:
@@ -463,18 +489,26 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
                         elif m_type == "END_INTERVIEW":
                             _vlog(session_id, "END_INTERVIEW", "Client requested END_INTERVIEW.")
+                            session_ended.set()
                             break
 
                     except Exception as e:
                         _vlog(session_id, "CONTROL_MSG_ERR", str(e))
         except (WebSocketDisconnect, asyncio.CancelledError):
             pass
+        except Exception as e:
+            _vlog(session_id, "BROWSER_INPUT_ERR", str(e))
+            if websocket.client_state.name == "CONNECTED":
+                try:
+                    await websocket.send_json({"type": "ERROR", "message": f"Browser input error: {str(e)}"})
+                except Exception:
+                    pass
 
     # ── Task 2: Audio Queue -> Gemini Live ───────────────────────────────────
     async def queue_to_gemini(session):
         nonlocal first_audio_chunk_logged
         try:
-            while True:
+            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
                 chunk = await audio_queue.get()
                 stats["gemini_forwarded_bytes"] += len(chunk)
                 if not first_audio_chunk_logged:
@@ -487,15 +521,35 @@ async def interview_websocket_proxy(websocket: WebSocket):
             pass
         except Exception as e:
             _vlog(session_id, "INPUT_ERROR", str(e))
-
+            if websocket.client_state.name == "CONNECTED":
+                try:
+                    await websocket.send_json({"type": "ERROR", "message": f"Microphone forward error: {str(e)}"})
+                except Exception:
+                    pass
 
     # ── Task 3: Gemini Live -> Browser ───────────────────────────────────────
     async def gemini_to_browser(session):
         nonlocal latest_resumption_handle, t_speech_ended
         _turn_ai_chunks = 0
+
+        def _flush_candidate_turn():
+            cand_text = "".join(candidate_turn_fragments).strip()
+            if cand_text:
+                if not (transcript_log and transcript_log[-1].get("role") == "candidate" and transcript_log[-1].get("text") == cand_text):
+                    transcript_log.append({
+                        "role": "candidate",
+                        "text": cand_text,
+                        "is_final": True,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    })
+                candidate_turn_fragments.clear()
+
         try:
-            while True:
+            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
+                turn_received_any = False
                 async for msg in session.receive():
+                    turn_received_any = True
+
                     # 1. Update session resumption handle
                     if msg.session_resumption_update and msg.session_resumption_update.new_handle:
                         latest_resumption_handle = msg.session_resumption_update.new_handle
@@ -525,7 +579,72 @@ async def interview_websocket_proxy(websocket: WebSocket):
                             }
                         })
 
-                    # 4. Server content (Audio, Transcripts, Interruption)
+                    # 4. Handle top-level tool call requests
+                    if msg.tool_call and msg.tool_call.function_calls:
+                        function_responses = []
+                        for fc in msg.tool_call.function_calls:
+                            fc_name = getattr(fc, 'name', '') or ''
+                            fc_args = getattr(fc, 'args', {}) or {}
+                            fc_id = getattr(fc, 'id', None)
+                            _vlog(session_id, "TOOL_CALL", f"Model requested tool: {fc_name} args={fc_args}")
+                            await websocket.send_json({
+                                "type": "TOOL_START",
+                                "name": fc_name,
+                                "args": fc_args
+                            })
+                            t_tool_start = time.time()
+                            try:
+                                result = await execute_interview_tool(fc_name, fc_args)
+                                tool_status = "success"
+                            except Exception as tool_err:
+                                tool_status = "error"
+                                result = {"status": "error", "message": str(tool_err)}
+                                _vlog(session_id, "TOOL_ERROR", f"Tool {fc_name} execution error: {tool_err}")
+
+                            elapsed_ms = (time.time() - t_tool_start) * 1000
+                            _vlog(session_id, "TOOL_DONE", f"Tool {fc_name} status={tool_status} in {elapsed_ms:.1f}ms")
+                            function_responses.append(
+                                types.FunctionResponse(name=fc_name, id=fc_id, response=result)
+                            )
+
+                        t_resp_send = time.time()
+                        try:
+                            await session.send_tool_response(function_responses=function_responses)
+                            _vlog(session_id, "TOOL_RETURN", f"Tool responses returned to model in {((time.time() - t_resp_send)*1000):.1f}ms")
+                        except Exception as resp_err:
+                            _vlog(session_id, "TOOL_RETURN_FALLBACK", f"send_tool_response primary failed ({resp_err}), trying fallback input format")
+                            try:
+                                await session.send(input={
+                                    "function_responses": [
+                                        {"response": fr.response, "id": fr.id} for fr in function_responses
+                                    ]
+                                })
+                                _vlog(session_id, "TOOL_RETURN", f"Fallback tool responses returned to model in {((time.time() - t_resp_send)*1000):.1f}ms")
+                            except Exception as fb_err:
+                                _vlog(session_id, "TOOL_RETURN_ERROR", f"All tool response methods failed: {resp_err} | {fb_err}")
+
+                    # 5. Direct audio / text in msg
+                    if hasattr(msg, 'data') and msg.data:
+                        _turn_ai_chunks += 1
+                        if t_speech_ended is not None:
+                            latency_ms = (time.time() - t_speech_ended) * 1000
+                            await websocket.send_json({
+                                "type": "METRICS",
+                                "latencyMs": round(latency_ms, 1)
+                            })
+                            t_speech_ended = None
+                        await websocket.send_bytes(msg.data)
+
+                    if hasattr(msg, 'text') and msg.text:
+                        text_chunk = msg.text.strip()
+                        if text_chunk:
+                            ai_turn_fragments.append(text_chunk)
+                            await websocket.send_json({
+                                "type": "TEXT_CHUNK",
+                                "text": text_chunk
+                            })
+
+                    # 6. Server content (Audio, Transcripts, Interruption, Parts)
                     if msg.server_content:
                         sc = msg.server_content
 
@@ -548,10 +667,11 @@ async def interview_websocket_proxy(websocket: WebSocket):
                             if is_final:
                                 transcript_log.append({
                                     "role": "candidate",
-                                    "text": full_cand_text,
+                                    "text": full_cand_text.strip(),
                                     "is_final": True,
                                     "timestamp": datetime.utcnow().isoformat(),
                                 })
+                                candidate_turn_fragments.clear()
 
                             await websocket.send_json({
                                 "type": "TRANSCRIPT",
@@ -563,6 +683,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
                         # Real-time Output Transcript (Alex Speech)
                         if sc.output_transcription and sc.output_transcription.text:
+                            _flush_candidate_turn()
                             stats["transcription_event_count"] += 1
                             delta_text = sc.output_transcription.text
                             ai_turn_fragments.append(delta_text)
@@ -579,9 +700,11 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                 "isFinal": is_final,
                             })
 
-                        # Raw 24kHz PCM16 Binary Audio Relay to browser Web Audio pipeline
+                        # Process EVERY part in sc.model_turn.parts in order
                         if sc.model_turn and sc.model_turn.parts:
+                            _flush_candidate_turn()
                             for part in sc.model_turn.parts:
+                                # Part 1: Audio
                                 if part.inline_data and part.inline_data.data:
                                     _turn_ai_chunks += 1
                                     if t_speech_ended is not None:
@@ -591,11 +714,53 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                             "latencyMs": round(latency_ms, 1)
                                         })
                                         t_speech_ended = None
-
                                     await websocket.send_bytes(part.inline_data.data)
+
+                                # Part 2: Text
+                                if part.text and not getattr(part, 'thought', False):
+                                    text_chunk = part.text.strip()
+                                    if text_chunk:
+                                        ai_turn_fragments.append(text_chunk)
+                                        await websocket.send_json({
+                                            "type": "TEXT_CHUNK",
+                                            "text": text_chunk
+                                        })
+
+                                # Part 3: Inline Function Call
+                                if getattr(part, 'function_call', None):
+                                    fc = part.function_call
+                                    fc_name = getattr(fc, 'name', '') or ''
+                                    fc_args = getattr(fc, 'args', {}) or {}
+                                    fc_id = getattr(fc, 'id', None)
+                                    _vlog(session_id, "TOOL_CALL", f"Model requested tool (inline): {fc_name} args={fc_args}")
+                                    await websocket.send_json({
+                                        "type": "TOOL_START",
+                                        "name": fc_name,
+                                        "args": fc_args
+                                    })
+                                    t_part_tool = time.time()
+                                    try:
+                                        result = await execute_interview_tool(fc_name, fc_args)
+                                        tool_status = "success"
+                                    except Exception as tool_err:
+                                        tool_status = "error"
+                                        result = {"status": "error", "message": str(tool_err)}
+                                        _vlog(session_id, "TOOL_ERROR", f"Tool {fc_name} execution error: {tool_err}")
+
+                                    elapsed_ms = (time.time() - t_part_tool) * 1000
+                                    _vlog(session_id, "TOOL_DONE", f"Tool {fc_name} status={tool_status} in {elapsed_ms:.1f}ms")
+                                    fr = types.FunctionResponse(name=fc_name, id=fc_id, response=result)
+                                    try:
+                                        await session.send_tool_response(function_responses=[fr])
+                                    except Exception:
+                                        try:
+                                            await session.send(input={"function_responses": [{"response": fr.response, "id": fr.id}]})
+                                        except Exception as part_fb_err:
+                                            _vlog(session_id, "TOOL_RETURN_ERROR", f"Failed returning inline tool response: {part_fb_err}")
 
                         # Turn completion signal
                         if sc.turn_complete:
+                            _flush_candidate_turn()
                             full_ai = "".join(ai_turn_fragments).strip()
                             if full_ai:
                                 transcript_log.append({
@@ -608,18 +773,29 @@ async def interview_websocket_proxy(websocket: WebSocket):
                             _turn_ai_chunks = 0
                             ai_turn_fragments.clear()
                             await websocket.send_json({"type": "TURN_COMPLETE"})
-                            break
+                            # Let session.receive() finish iteration naturally without manual break
 
-        except asyncio.CancelledError:
+                if not turn_received_any:
+                    if getattr(session, '_ws', None) and getattr(session._ws, 'closed', False):
+                        _vlog(session_id, "SESSION_CLOSED", "Underlying Gemini Live session closed.")
+                        break
+                    await asyncio.sleep(0.05)
+
+        except (asyncio.CancelledError, WebSocketDisconnect):
             pass
         except Exception as e:
             _vlog(session_id, "OUTPUT_ERROR", str(e))
+            if websocket.client_state.name == "CONNECTED":
+                try:
+                    await websocket.send_json({"type": "ERROR", "message": f"Streaming output error: {str(e)}"})
+                except Exception:
+                    pass
 
     # ── Main Connection Loop ──────────────────────────────────────────────────
     browser_task = asyncio.create_task(browser_to_queue())
 
     try:
-        while True:
+        while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
             live_config = build_interview_config(resumption_handle=latest_resumption_handle)
             try:
                 _vlog(session_id, "GEMINI_CONNECT", f"Connecting to Gemini Live ({live_model})...")
@@ -654,16 +830,17 @@ async def interview_websocket_proxy(websocket: WebSocket):
                     # Run input and output loops concurrently
                     t_in = asyncio.create_task(queue_to_gemini(session))
                     t_out = asyncio.create_task(gemini_to_browser(session))
+                    t_end = asyncio.create_task(session_ended.wait())
 
-                    done, pending = await asyncio.wait([t_in, t_out], return_when=asyncio.FIRST_COMPLETED)
+                    done, pending = await asyncio.wait([t_in, t_out, t_end], return_when=asyncio.FIRST_COMPLETED)
                     for p in pending:
                         p.cancel()
 
-                    if websocket.client_state.name != "CONNECTED":
+                    if session_ended.is_set() or websocket.client_state.name != "CONNECTED":
                         break
             except Exception as conn_err:
                 _vlog(session_id, "RECONNECT", f"Session dropped ({conn_err}). Reconnecting...")
-                if websocket.client_state.name != "CONNECTED":
+                if session_ended.is_set() or websocket.client_state.name != "CONNECTED":
                     break
                 await asyncio.sleep(0.5)
 
@@ -739,8 +916,8 @@ async def interview_websocket_proxy(websocket: WebSocket):
                     "evaluation": session_evaluation,
                     "transcript": transcript_log
                 })
-            except Exception:
-                pass
+            except Exception as summary_err:
+                _vlog(session_id, "SUMMARY_SEND_ERR", f"Failed sending summary JSON: {summary_err}")
 
 
 # ── REST API Endpoints for Retrieving Interview Summaries & History ───────────

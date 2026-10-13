@@ -80,6 +80,9 @@ export default function NovaDrawer() {
     if (action === 'NAVIGATE' && data?.destination) {
       let dest = data.destination.toLowerCase().trim();
       if (!dest.startsWith('/')) dest = '/' + dest;
+      if (dest === '/interview') {
+        closeNova();
+      }
       navigate(dest);
       addActivity(`Navigated to ${dest}`, 'completed');
     } else if (action === 'PROJECT_ADDED') {

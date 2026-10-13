@@ -31,43 +31,54 @@ export class AudioPlaybackManager {
    * @param {ArrayBuffer} pcmArrayBuffer - Raw 24kHz 16-bit Mono PCM bytes
    */
   playChunk(pcmArrayBuffer) {
-    if (!pcmArrayBuffer || pcmArrayBuffer.byteLength < 2) return;
-
-    this._initContext();
-
-    const int16View = new Int16Array(pcmArrayBuffer);
-    const float32Data = new Float32Array(int16View.length);
-
-    // Convert Int16 [-32768, 32767] to normalized Float32 [-1.0, 1.0]
-    for (let i = 0; i < int16View.length; i++) {
-      float32Data[i] = int16View[i] / 32768.0;
+    if (!pcmArrayBuffer || pcmArrayBuffer.byteLength < 2) {
+      voiceLog.push('PLAYBACK', 'DECODE_SKIP', { reason: 'empty_or_short_chunk', bytes: pcmArrayBuffer?.byteLength || 0 });
+      return;
     }
 
-    const audioBuffer = this.audioContext.createBuffer(
-      1,
-      float32Data.length,
-      this.targetSampleRate
-    );
-    audioBuffer.copyToChannel(float32Data, 0);
+    try {
+      this._initContext();
 
-    const source = this.audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(this.audioContext.destination);
+      const int16View = new Int16Array(pcmArrayBuffer);
+      const float32Data = new Float32Array(int16View.length);
 
-    // Gapless scheduling
-    const currentTime = this.audioContext.currentTime;
-    const startTime = Math.max(currentTime, this.nextStartTime);
-    source.start(startTime);
+      // Convert Int16 [-32768, 32767] to normalized Float32 [-1.0, 1.0]
+      for (let i = 0; i < int16View.length; i++) {
+        float32Data[i] = int16View[i] / 32768.0;
+      }
 
-    this.nextStartTime = startTime + audioBuffer.duration;
-    this.activeSources.add(source);
+      const audioBuffer = this.audioContext.createBuffer(
+        1,
+        float32Data.length,
+        this.targetSampleRate
+      );
+      audioBuffer.copyToChannel(float32Data, 0);
 
-    source.onended = () => {
-      this.activeSources.delete(source);
-      try {
-        source.disconnect();
-      } catch (_) {}
-    };
+      const source = this.audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.audioContext.destination);
+
+      // Gapless scheduling
+      const currentTime = this.audioContext.currentTime;
+      const startTime = Math.max(currentTime, this.nextStartTime);
+      source.start(startTime);
+
+      this.nextStartTime = startTime + audioBuffer.duration;
+      this.activeSources.add(source);
+
+      source.onended = () => {
+        this.activeSources.delete(source);
+        try {
+          source.disconnect();
+        } catch (_) {}
+      };
+    } catch (err) {
+      console.error('[PLAYBACK][DECODE_ERROR] Failed to decode/schedule audio chunk:', err);
+      voiceLog.push('PLAYBACK', 'DECODE_ERROR', {
+        error: err?.message || String(err),
+        byteLength: pcmArrayBuffer.byteLength,
+      });
+    }
   }
 
   /**

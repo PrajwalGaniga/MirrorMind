@@ -288,45 +288,50 @@ export class GeminiLiveClient {
       this.playAnalyser.connect(this.playContext.destination);
     }
 
-    if (this.playContext.state === 'suspended') {
-      this.playContext.resume();
-    }
-
-    const int16View = new Int16Array(arrayBuffer);
-    const float32Data = new Float32Array(int16View.length);
-
-    for (let i = 0; i < int16View.length; i++) {
-      float32Data[i] = int16View[i] / 32768.0;
-    }
-
-    const audioBuffer = this.playContext.createBuffer(1, float32Data.length, 24000);
-    audioBuffer.copyToChannel(float32Data, 0);
-
-    const source = this.playContext.createBufferSource();
-    source.buffer = audioBuffer;
-
-    if (this.playAnalyser) {
-      source.connect(this.playAnalyser);
-    } else {
-      source.connect(this.playContext.destination);
-    }
-
-    const currentTime = this.playContext.currentTime;
-    const startTime = Math.max(currentTime, this.nextPlayTime);
-    source.start(startTime);
-
-    this.nextPlayTime = startTime + audioBuffer.duration;
-    this.activeSources.push(source);
-
-    source.onended = () => {
-      const idx = this.activeSources.indexOf(source);
-      if (idx !== -1) this.activeSources.splice(idx, 1);
-      if (this.activeSources.length === 0 && this.isTurnComplete) {
-        this.isTurnComplete = false;
-        console.log('[NOVA][CLIENT] Playback complete. Ready for next query.');
-        this.onStatusChange('PLAYBACK_COMPLETE');
+    try {
+      if (this.playContext.state === 'suspended') {
+        this.playContext.resume();
       }
-    };
+
+      const int16View = new Int16Array(arrayBuffer);
+      const float32Data = new Float32Array(int16View.length);
+
+      for (let i = 0; i < int16View.length; i++) {
+        float32Data[i] = int16View[i] / 32768.0;
+      }
+
+      const audioBuffer = this.playContext.createBuffer(1, float32Data.length, 24000);
+      audioBuffer.copyToChannel(float32Data, 0);
+
+      const source = this.playContext.createBufferSource();
+      source.buffer = audioBuffer;
+
+      if (this.playAnalyser) {
+        source.connect(this.playAnalyser);
+      } else {
+        source.connect(this.playContext.destination);
+      }
+
+      const currentTime = this.playContext.currentTime;
+      const startTime = Math.max(currentTime, this.nextPlayTime);
+      source.start(startTime);
+
+      this.nextPlayTime = startTime + audioBuffer.duration;
+      this.activeSources.push(source);
+
+      source.onended = () => {
+        const idx = this.activeSources.indexOf(source);
+        if (idx !== -1) this.activeSources.splice(idx, 1);
+        if (this.activeSources.length === 0 && this.isTurnComplete) {
+          this.isTurnComplete = false;
+          console.log('[NOVA][CLIENT] Playback complete. Ready for next query.');
+          this.onStatusChange('PLAYBACK_COMPLETE');
+        }
+      };
+    } catch (err) {
+      console.error('[NOVA][PLAYBACK][DECODE_ERROR] Failed to decode audio chunk:', err);
+      voiceLog.push('NOVA', 'DECODE_ERROR', { error: err?.message || String(err), byteLength: arrayBuffer.byteLength });
+    }
   }
 
   /**

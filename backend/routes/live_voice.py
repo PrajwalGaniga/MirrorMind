@@ -819,67 +819,86 @@ async def live_voice_bridge(websocket: WebSocket):
             voice_logger.log("WS_DISCONNECT", "Client disconnected from input loop.")
         except Exception as e:
             voice_logger.log("INPUT_ERROR", f"Exception in client_to_gemini: {e}")
+            try:
+                await websocket.send_json({"type": "ERROR", "message": f"Client audio input error: {str(e)}"})
+            except Exception:
+                pass
 
     # ── Task: Gemini to Client (Audio stream & Tool events) ──────────────────
     async def gemini_to_client():
         try:
-            while True:
+            while websocket.client_state.name == "CONNECTED":
                 first_chunk_received = False
                 total_audio_bytes = 0
                 _turn_audio_chunks = 0  # Phase-0: count audio chunks per turn
+                turn_received_any = False
 
                 async for response in session.receive():
+                    turn_received_any = True
+
                     # Phase-0: log go_away if present in SDK version
-                    # TODO(verify-sdk): go_away field path may differ across google-genai versions
                     if hasattr(response, 'go_away') and response.go_away:
                         voice_logger.log("GO_AWAY", "Server sent go_away signal — reconnect recommended")
 
                     # Phase-0: log session resumption handle updates
-                    # TODO(verify-sdk): session_resumption_update field may not exist in all SDK versions
                     if hasattr(response, 'session_resumption_update') and response.session_resumption_update:
                         sru = response.session_resumption_update
                         new_handle = getattr(sru, 'new_handle', None)
                         voice_logger.log("SESSION_RESUMPTION", f"Resumption handle updated new_handle={'<set>' if new_handle else '<none>'}")
 
-                    # 1. Handle tool call requests
-                    if response.tool_call:
-                        t_tool_call = time.time()
+                    # 1. Handle top-level tool call requests
+                    if response.tool_call and response.tool_call.function_calls:
                         function_responses = []
                         for fc in response.tool_call.function_calls:
-                            voice_logger.log("TOOL_CALL", f"Model requested tool: {fc.name} with args: {fc.args}")
+                            fc_name = getattr(fc, 'name', '') or ''
+                            fc_args = getattr(fc, 'args', {}) or {}
+                            fc_id = getattr(fc, 'id', None)
+                            voice_logger.log("TOOL_CALL", f"Model requested tool: {fc_name} with args: {fc_args}")
                             await websocket.send_json({
                                 "type": "TOOL_START",
-                                "name": fc.name,
-                                "args": fc.args
+                                "name": fc_name,
+                                "args": fc_args
                             })
-                            result = await execute_tool(fc.name, fc.args)
+                            t_tool_start = time.time()
+                            try:
+                                result = await execute_tool(fc_name, fc_args)
+                                tool_status = "success"
+                            except Exception as tool_err:
+                                tool_status = "error"
+                                result = {"status": "error", "message": str(tool_err)}
+                                voice_logger.log("TOOL_ERROR", f"Tool {fc_name} execution error: {tool_err}")
+
+                            elapsed_ms = (time.time() - t_tool_start) * 1000
+                            voice_logger.log("TOOL_DONE", f"Tool {fc_name} status={tool_status} in {elapsed_ms:.1f}ms", elapsed_ms)
                             function_responses.append(
-                                types.FunctionResponse(name=fc.name, id=fc.id, response=result)
+                                types.FunctionResponse(name=fc_name, id=fc_id, response=result)
                             )
 
                         t_resp_send = time.time()
                         try:
                             await session.send_tool_response(function_responses=function_responses)
-                        except Exception:
-                            await session.send(input={
-                                "function_responses": [
-                                    {"response": fr.response, "id": fr.id} for fr in function_responses
-                                ]
-                            })
-                        voice_logger.log("TOOL_RETURN", f"Tool responses returned to model in {((time.time() - t_resp_send)*1000):.1f}ms")
+                            voice_logger.log("TOOL_RETURN", f"Tool responses returned to model in {((time.time() - t_resp_send)*1000):.1f}ms")
+                        except Exception as resp_err:
+                            voice_logger.log("TOOL_RETURN_FALLBACK", f"send_tool_response primary failed ({resp_err}), trying fallback input format")
+                            try:
+                                await session.send(input={
+                                    "function_responses": [
+                                        {"response": fr.response, "id": fr.id} for fr in function_responses
+                                    ]
+                                })
+                                voice_logger.log("TOOL_RETURN", f"Fallback tool responses returned to model in {((time.time() - t_resp_send)*1000):.1f}ms")
+                            except Exception as fb_err:
+                                voice_logger.log("TOOL_RETURN_ERROR", f"All tool response methods failed: {resp_err} | {fb_err}")
 
                     # 2. Direct streaming audio PCM & text chunks from Live API
-                    has_sent_audio = False
-                    has_sent_text = False
                     if hasattr(response, 'data') and response.data:
                         chunk_len = len(response.data)
                         total_audio_bytes += chunk_len
-                        _turn_audio_chunks += 1  # Phase-0: per-turn chunk counter
+                        _turn_audio_chunks += 1
                         if not first_chunk_received:
                             first_chunk_received = True
                             voice_logger.log("AUDIO_TTFB", f"First audio chunk received ({chunk_len} bytes)")
                         await websocket.send_bytes(response.data)
-                        has_sent_audio = True
 
                     if hasattr(response, 'text') and response.text:
                         text_chunk = response.text.strip()
@@ -889,32 +908,40 @@ async def live_voice_bridge(websocket: WebSocket):
                                 "type": "TEXT_CHUNK",
                                 "text": text_chunk
                             })
-                            has_sent_text = True
 
-                    # 3. Handle server_content parts as robust fallback
+                    # 3. Handle server_content
                     if response.server_content:
-                        if response.server_content.interrupted:
+                        sc = response.server_content
+                        if sc.interrupted:
                             voice_logger.log("INTERRUPTED", "User barge-in interrupted Nova speech. reason=server")
                             await websocket.send_json({"type": "INTERRUPTED"})
 
-                        # Phase-0: log input transcription length
-                        # TODO(verify-sdk): input_transcription field path may differ across google-genai versions
-                        if hasattr(response.server_content, 'input_transcription') and response.server_content.input_transcription:
-                            t_in = response.server_content.input_transcription
+                        if hasattr(sc, 'input_transcription') and sc.input_transcription:
+                            t_in = sc.input_transcription
                             t_text = getattr(t_in, 'text', '') or ''
                             voice_logger.log("TRANSCRIPTION_IN", f"len={len(t_text)} finished={getattr(t_in, 'finished', None)}")
 
-                        # Phase-0: log output transcription length
-                        # TODO(verify-sdk): output_transcription field path may differ across google-genai versions
-                        if hasattr(response.server_content, 'output_transcription') and response.server_content.output_transcription:
-                            t_out = response.server_content.output_transcription
+                        if hasattr(sc, 'output_transcription') and sc.output_transcription:
+                            t_out = sc.output_transcription
                             t_text = getattr(t_out, 'text', '') or ''
                             voice_logger.log("TRANSCRIPTION_OUT", f"len={len(t_text)} finished={getattr(t_out, 'finished', None)}")
 
-                        model_turn = response.server_content.model_turn
-                        if model_turn:
+                        # Process EVERY part in model_turn.parts in order
+                        model_turn = sc.model_turn
+                        if model_turn and model_turn.parts:
                             for part in model_turn.parts:
-                                if not has_sent_text and part.text and not getattr(part, 'thought', False):
+                                # 1. Audio part
+                                if part.inline_data and part.inline_data.data:
+                                    chunk_len = len(part.inline_data.data)
+                                    total_audio_bytes += chunk_len
+                                    _turn_audio_chunks += 1
+                                    if not first_chunk_received:
+                                        first_chunk_received = True
+                                        voice_logger.log("AUDIO_TTFB", f"First audio chunk received ({chunk_len} bytes)")
+                                    await websocket.send_bytes(part.inline_data.data)
+
+                                # 2. Text part
+                                if part.text and not getattr(part, 'thought', False):
                                     text_chunk = part.text.strip()
                                     if text_chunk:
                                         voice_logger.log("TEXT_OUT", f"Chunk: '{text_chunk}'")
@@ -923,24 +950,57 @@ async def live_voice_bridge(websocket: WebSocket):
                                             "text": text_chunk
                                         })
 
-                                if not has_sent_audio and part.inline_data and part.inline_data.data:
-                                    chunk_len = len(part.inline_data.data)
-                                    total_audio_bytes += chunk_len
-                                    _turn_audio_chunks += 1  # Phase-0: per-turn chunk counter
-                                    if not first_chunk_received:
-                                        first_chunk_received = True
-                                        voice_logger.log("AUDIO_TTFB", f"First audio chunk received ({chunk_len} bytes)")
-                                    await websocket.send_bytes(part.inline_data.data)
+                                # 3. Inline function call part
+                                if getattr(part, 'function_call', None):
+                                    fc = part.function_call
+                                    fc_name = getattr(fc, 'name', '') or ''
+                                    fc_args = getattr(fc, 'args', {}) or {}
+                                    fc_id = getattr(fc, 'id', None)
+                                    voice_logger.log("TOOL_CALL", f"Model requested tool (inline): {fc_name} with args: {fc_args}")
+                                    await websocket.send_json({
+                                        "type": "TOOL_START",
+                                        "name": fc_name,
+                                        "args": fc_args
+                                    })
+                                    t_part_tool = time.time()
+                                    try:
+                                        result = await execute_tool(fc_name, fc_args)
+                                        tool_status = "success"
+                                    except Exception as tool_err:
+                                        tool_status = "error"
+                                        result = {"status": "error", "message": str(tool_err)}
+                                        voice_logger.log("TOOL_ERROR", f"Tool {fc_name} execution error: {tool_err}")
 
-                        if response.server_content.turn_complete:
+                                    elapsed_ms = (time.time() - t_part_tool) * 1000
+                                    voice_logger.log("TOOL_DONE", f"Tool {fc_name} status={tool_status} in {elapsed_ms:.1f}ms", elapsed_ms)
+                                    fr = types.FunctionResponse(name=fc_name, id=fc_id, response=result)
+                                    try:
+                                        await session.send_tool_response(function_responses=[fr])
+                                    except Exception:
+                                        try:
+                                            await session.send(input={"function_responses": [{"response": fr.response, "id": fr.id}]})
+                                        except Exception as part_fb_err:
+                                            voice_logger.log("TOOL_RETURN_ERROR", f"Failed returning inline tool response: {part_fb_err}")
+
+                        if sc.turn_complete:
                             voice_logger.log("TURN_COMPLETE", f"Model turn finished. Streamed {total_audio_bytes} bytes in {_turn_audio_chunks} chunks.")
                             await websocket.send_json({"type": "TURN_COMPLETE"})
-                            # Break inner generator loop for this turn; outer while True starts receive() for next turn!
-                            break
+                            # Let session.receive() finish iteration naturally without manual break
+
+                if not turn_received_any:
+                    if getattr(session, '_ws', None) and getattr(session._ws, 'closed', False):
+                        voice_logger.log("SESSION_CLOSED", "Underlying Gemini Live session closed.")
+                        break
+                    await asyncio.sleep(0.05)
+
         except (asyncio.CancelledError, WebSocketDisconnect):
             voice_logger.log("WS_DISCONNECT", "gemini_to_client loop terminated.")
         except Exception as e:
             voice_logger.log("OUTPUT_ERROR", f"Exception in gemini_to_client: {e}")
+            try:
+                await websocket.send_json({"type": "ERROR", "message": f"Streaming output error: {str(e)}"})
+            except Exception:
+                pass
 
     # Run bidirectional pipeline concurrently
     try:
@@ -954,5 +1014,5 @@ async def live_voice_bridge(websocket: WebSocket):
         voice_logger.log("WS_CLEANUP", f"Cleaning up live voice session (duration={session_duration:.1f}ms)", session_duration)
         try:
             await session.close()
-        except Exception:
-            pass
+        except Exception as close_err:
+            voice_logger.log("SESSION_CLOSE_WARN", f"Session close note: {close_err}")

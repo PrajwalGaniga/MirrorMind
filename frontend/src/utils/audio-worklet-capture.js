@@ -133,8 +133,8 @@ export class AudioWorkletCapture {
       };
 
       this.isRecording = true;
-      if (this.enableVAD) {
-        this.isCalibrating = true;
+      if (this.enableVAD || typeof this.onLevel === 'function') {
+        this.isCalibrating = this.enableVAD;
         this.calibrationSamples = [];
         const calibrationEnd = performance.now() + 2000; // First 2 seconds of session noise
         this._startLevelMonitor(calibrationEnd);
