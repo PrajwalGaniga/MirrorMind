@@ -23,6 +23,18 @@ from auth_utils import decode_token
 
 router = APIRouter(prefix="/api/voice", tags=["live_interview"])
 
+
+# ── Phase-0: Structured debug logger (gated on DEBUG_VOICE env) ───────────────
+def _vlog(session_id: str, category: str, message: str) -> None:
+    """Structured timestamped logger for the interview pipeline.
+    All output is suppressed when DEBUG_VOICE=false/0/no in environment.
+    """
+    if os.getenv("DEBUG_VOICE", "true").strip().lower() in ("false", "0", "no"):
+        return
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    print(f"[{ts}] [{session_id}] [{category.upper()}] {message}", flush=True)
+
+
 # ── System Instruction for Alex, Senior Technical Interviewer & Mentor ─────────
 ALEX_SYSTEM_INSTRUCTION = """Your name is Alex. You are a senior, friendly, and approachable technical interviewer conducting a live conversational interview for MirrorMind.
 
@@ -361,7 +373,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
         "transcription_event_count": 0,
     }
 
-    print(f"[{session_id}] Candidate connected: {candidate_name} (User: {user_id})")
+    _vlog(session_id, "WS_CONNECT", f"Candidate connected: {candidate_name} (User: {user_id})")
 
     audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
 
@@ -369,6 +381,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
     async def browser_to_queue():
         nonlocal t_speech_ended, turn_counter, t_turn_start, has_greeted
         use_manual_vad = os.getenv("USE_MANUAL_VAD", "true").lower() == "true"
+        _turn_cand_chunks = 0
         try:
             while True:
                 msg = await websocket.receive()
@@ -376,6 +389,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
                     pcm_chunk = msg["bytes"]
                     stats["backend_received_bytes"] += len(pcm_chunk)
                     current_candidate_pcm.extend(pcm_chunk)
+                    _turn_cand_chunks += 1
                     t_speech_ended = time.time()
                     try:
                         audio_queue.put_nowait(pcm_chunk)
@@ -390,23 +404,26 @@ async def interview_websocket_proxy(websocket: WebSocket):
                 elif "text" in msg and msg["text"]:
                     try:
                         data = json.loads(msg["text"])
-                        m_type = data.get("type")
+                        m_type = data.get("type", "UNKNOWN")
+                        _vlog(session_id, "BROWSER_MSG", f"type={m_type}")
 
                         if m_type == "ACTIVITY_START":
                             t_turn_start = time.time()
                             current_candidate_pcm.clear()
                             candidate_turn_fragments.clear()
+                            _turn_cand_chunks = 0
+                            _vlog(session_id, "ACTIVITY_START", "Candidate started speaking")
                             if active_gemini_session and use_manual_vad:
                                 try:
                                     await active_gemini_session.send_realtime_input(activity_start=types.ActivityStart())
                                 except Exception as e:
-                                    print(f"[{session_id}][ACTIVITY_START_ERR] {e}")
+                                    _vlog(session_id, "ACTIVITY_START_ERR", str(e))
 
                         elif m_type == "ACTIVITY_END":
                             turn_counter += 1
                             turn_duration = time.time() - t_turn_start
                             full_cand_text = "".join(candidate_turn_fragments).strip()
-                            print(f"[{session_id}][TURN_{turn_counter}] Candidate turn ended ({turn_duration:.2f}s, {len(current_candidate_pcm)} bytes)")
+                            _vlog(session_id, f"TURN_{turn_counter}", f"Candidate turn ended ({turn_duration:.2f}s, {len(current_candidate_pcm)} bytes, chunks={_turn_cand_chunks})")
 
                             # Save candidate turn audio to /debug/turn_<n>.wav
                             if len(current_candidate_pcm) > 0:
@@ -421,14 +438,14 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                         wf.setframerate(16000)
                                         wf.writeframes(bytes(current_candidate_pcm))
                                 except Exception as wav_err:
-                                    print(f"[{session_id}][WAV_ERROR] {wav_err}")
+                                    _vlog(session_id, "WAV_ERROR", str(wav_err))
 
                             # Inform Gemini Live of turn end
                             if active_gemini_session and use_manual_vad:
                                 try:
                                     await active_gemini_session.send_realtime_input(activity_end=types.ActivityEnd())
                                 except Exception as e:
-                                    print(f"[{session_id}][ACTIVITY_END_ERR] {e}")
+                                    _vlog(session_id, "ACTIVITY_END_ERR", str(e))
 
                         elif m_type == "START_INTERVIEW":
                             if not has_greeted and active_gemini_session:
@@ -445,11 +462,11 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                 )
 
                         elif m_type == "END_INTERVIEW":
-                            print(f"[{session_id}] Client requested END_INTERVIEW.")
+                            _vlog(session_id, "END_INTERVIEW", "Client requested END_INTERVIEW.")
                             break
 
                     except Exception as e:
-                        print(f"[{session_id}][CONTROL_MSG_ERR] {e}")
+                        _vlog(session_id, "CONTROL_MSG_ERR", str(e))
         except (WebSocketDisconnect, asyncio.CancelledError):
             pass
 
@@ -462,24 +479,27 @@ async def interview_websocket_proxy(websocket: WebSocket):
                 stats["gemini_forwarded_bytes"] += len(chunk)
                 if not first_audio_chunk_logged:
                     first_audio_chunk_logged = True
-                    print(f"[{session_id}] First audio chunk dispatched to Gemini Live.")
+                    _vlog(session_id, "GEMINI_FIRST_CHUNK", "First audio chunk dispatched to Gemini Live.")
                 await session.send_realtime_input(
                     audio={"data": chunk, "mime_type": "audio/pcm;rate=16000"}
                 )
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"[{session_id}][INPUT_ERROR] {e}")
+            _vlog(session_id, "INPUT_ERROR", str(e))
+
 
     # ── Task 3: Gemini Live -> Browser ───────────────────────────────────────
     async def gemini_to_browser(session):
         nonlocal latest_resumption_handle, t_speech_ended
+        _turn_ai_chunks = 0
         try:
             while True:
                 async for msg in session.receive():
                     # 1. Update session resumption handle
                     if msg.session_resumption_update and msg.session_resumption_update.new_handle:
                         latest_resumption_handle = msg.session_resumption_update.new_handle
+                        _vlog(session_id, "SESSION_RESUMPTION", f"Handle updated: {latest_resumption_handle}")
                         await websocket.send_json({
                             "type": "SESSION_RESUMED",
                             "handle": latest_resumption_handle
@@ -487,6 +507,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
                     # 2. Server GoAway notification
                     if msg.go_away:
+                        _vlog(session_id, "GO_AWAY", f"time_left={getattr(msg.go_away, 'time_left', None)}")
                         await websocket.send_json({
                             "type": "GO_AWAY",
                             "timeLeft": msg.go_away.time_left
@@ -510,7 +531,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
                         # Interruption handling
                         if sc.interrupted:
-                            print(f"[{session_id}][INTERRUPTED] Candidate interrupted Alex.")
+                            _vlog(session_id, "INTERRUPTED", "Candidate interrupted Alex. reason=server")
                             ai_turn_fragments.clear()
                             await websocket.send_json({"type": "INTERRUPTED"})
 
@@ -521,6 +542,8 @@ async def interview_websocket_proxy(websocket: WebSocket):
                             candidate_turn_fragments.append(delta_text)
                             full_cand_text = "".join(candidate_turn_fragments)
                             is_final = sc.input_transcription.finished or False
+
+                            _vlog(session_id, "TRANSCRIPTION_IN", f"len={len(delta_text)} is_final={is_final}")
 
                             if is_final:
                                 transcript_log.append({
@@ -546,6 +569,8 @@ async def interview_websocket_proxy(websocket: WebSocket):
                             full_ai_text = "".join(ai_turn_fragments)
                             is_final = sc.output_transcription.finished or False
 
+                            _vlog(session_id, "TRANSCRIPTION_OUT", f"len={len(delta_text)} is_final={is_final}")
+
                             await websocket.send_json({
                                 "type": "TRANSCRIPT",
                                 "role": "assistant",
@@ -558,6 +583,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
                         if sc.model_turn and sc.model_turn.parts:
                             for part in sc.model_turn.parts:
                                 if part.inline_data and part.inline_data.data:
+                                    _turn_ai_chunks += 1
                                     if t_speech_ended is not None:
                                         latency_ms = (time.time() - t_speech_ended) * 1000
                                         await websocket.send_json({
@@ -578,6 +604,8 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                     "is_final": True,
                                     "timestamp": datetime.utcnow().isoformat(),
                                 })
+                            _vlog(session_id, "TURN_COMPLETE", f"Alex turn finished. audio_chunks={_turn_ai_chunks}")
+                            _turn_ai_chunks = 0
                             ai_turn_fragments.clear()
                             await websocket.send_json({"type": "TURN_COMPLETE"})
                             break
@@ -585,7 +613,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"[{session_id}][OUTPUT_ERROR] {e}")
+            _vlog(session_id, "OUTPUT_ERROR", str(e))
 
     # ── Main Connection Loop ──────────────────────────────────────────────────
     browser_task = asyncio.create_task(browser_to_queue())
@@ -594,9 +622,10 @@ async def interview_websocket_proxy(websocket: WebSocket):
         while True:
             live_config = build_interview_config(resumption_handle=latest_resumption_handle)
             try:
-                print(f"[{session_id}] Connecting to Gemini Live ({live_model})...")
+                _vlog(session_id, "GEMINI_CONNECT", f"Connecting to Gemini Live ({live_model})...")
                 async with client.aio.live.connect(model=live_model, config=live_config) as session:
                     active_gemini_session = session
+                    _vlog(session_id, "GEMINI_CONNECTED", "Session connected")
                     await websocket.send_json({
                         "type": "STATUS",
                         "status": "CONNECTED",
@@ -618,9 +647,9 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                 turns=[types.Content(parts=[types.Part.from_text(text=greeting_prompt)])],
                                 turn_complete=True
                             )
-                            print(f"[{session_id}] Opening greeting dispatched to Alex for {candidate_name}.")
+                            _vlog(session_id, "GREETING_SENT", f"Opening greeting dispatched to Alex for {candidate_name}.")
                         except Exception as e:
-                            print(f"[{session_id}][GREETING_ERROR] {e}")
+                            _vlog(session_id, "GREETING_ERROR", str(e))
 
                     # Run input and output loops concurrently
                     t_in = asyncio.create_task(queue_to_gemini(session))
@@ -633,7 +662,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
                     if websocket.client_state.name != "CONNECTED":
                         break
             except Exception as conn_err:
-                print(f"[{session_id}][RECONNECT] Session dropped ({conn_err}). Reconnecting...")
+                _vlog(session_id, "RECONNECT", f"Session dropped ({conn_err}). Reconnecting...")
                 if websocket.client_state.name != "CONNECTED":
                     break
                 await asyncio.sleep(0.5)
@@ -641,7 +670,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
     finally:
         browser_task.cancel()
         total_duration = round(time.time() - session_start_time)
-        print(f"[{session_id}] Disconnected after {total_duration}s. Generating evaluation for {len(transcript_log)} turns...")
+        _vlog(session_id, "WS_DISCONNECT", f"Disconnected after {total_duration}s. Generating evaluation for {len(transcript_log)} turns...")
 
         # 1. Generate Structured Evaluation & Summary
         try:
@@ -652,7 +681,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
             )
             evaluation_generated = True
         except Exception as eval_err:
-            print(f"[{session_id}][EVAL_ERROR] {eval_err}")
+            _vlog(session_id, "EVAL_ERROR", str(eval_err))
             session_evaluation = {
                 "summary": f"Completed voice interview with {candidate_name}.",
                 "strong_areas": ["Completed voice session"],
@@ -679,9 +708,9 @@ async def interview_websocket_proxy(websocket: WebSocket):
             }
             with open(log_path, "w", encoding="utf-8") as f:
                 json.dump(session_record, f, indent=2)
-            print(f"[{session_id}] Record saved to {log_path}")
+            _vlog(session_id, "DISK_LOG", f"Record saved to {log_path}")
         except Exception as disk_err:
-            print(f"[{session_id}][DISK_LOG_ERROR] {disk_err}")
+            _vlog(session_id, "DISK_LOG_ERROR", str(disk_err))
 
         # 3. Persist to MongoDB db.interviews
         if db is not None:
@@ -696,9 +725,9 @@ async def interview_websocket_proxy(websocket: WebSocket):
                     "evaluation": session_evaluation
                 }
                 await db.interviews.insert_one(mongo_doc)
-                print(f"[{session_id}] Successfully persisted interview evaluation to MongoDB db.interviews!")
+                _vlog(session_id, "PERSIST", "Successfully persisted interview evaluation to MongoDB db.interviews!")
             except Exception as persist_err:
-                print(f"[{session_id}][PERSIST_ERROR] Failed to save in MongoDB: {persist_err}")
+                _vlog(session_id, "PERSIST_ERROR", f"Failed to save in MongoDB: {persist_err}")
 
         # 4. Send Summary JSON over WebSocket if connection remains open
         if websocket.client_state.name == "CONNECTED":

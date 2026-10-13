@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from google import genai
+# Phase-0 import: _debug_enabled used only for conditional one-liners outside voice_logger
 from google.genai import types
 
 from db import database as db
@@ -743,18 +744,23 @@ async def live_voice_bridge(websocket: WebSocket):
 
     # ── Task: Client to Gemini (Audio PCM & Text Input) ──────────────────────
     async def client_to_gemini():
+        # Phase-0: running binary frame counter (reset each turn; logged at turn_complete)
+        _binary_frames_this_turn = 0
         try:
             while True:
                 msg = await websocket.receive()
                 if "bytes" in msg and msg["bytes"]:
                     pcm_chunk = msg["bytes"]
+                    _binary_frames_this_turn += 1
+                    voice_logger.log("BROWSER_MSG", f"type=BINARY bytes={len(pcm_chunk)} frame={_binary_frames_this_turn}")
                     await session.send_realtime_input(
                         audio={"data": pcm_chunk, "mime_type": "audio/pcm;rate=16000"}
                     )
                 elif "text" in msg and msg["text"]:
                     try:
                         data = json.loads(msg["text"])
-                        msg_type = data.get("type")
+                        msg_type = data.get("type", "UNKNOWN")
+                        voice_logger.log("BROWSER_MSG", f"type={msg_type}")
 
                         if msg_type == "TEXT_INPUT":
                             text = data.get("text", "").strip()
@@ -780,6 +786,10 @@ async def live_voice_bridge(websocket: WebSocket):
 
                         elif msg_type == "PING":
                             await websocket.send_json({"type": "PONG"})
+
+                        elif msg_type == "INTERRUPT":
+                            voice_logger.log("BROWSER_MSG", "type=INTERRUPT received (no server-side handler yet — TODO phase1)")
+
                     except Exception as parse_err:
                         voice_logger.log("WARNING", f"JSON parse error: {parse_err}")
         except (WebSocketDisconnect, RuntimeError):
@@ -793,8 +803,21 @@ async def live_voice_bridge(websocket: WebSocket):
             while True:
                 first_chunk_received = False
                 total_audio_bytes = 0
+                _turn_audio_chunks = 0  # Phase-0: count audio chunks per turn
 
                 async for response in session.receive():
+                    # Phase-0: log go_away if present in SDK version
+                    # TODO(verify-sdk): go_away field path may differ across google-genai versions
+                    if hasattr(response, 'go_away') and response.go_away:
+                        voice_logger.log("GO_AWAY", "Server sent go_away signal — reconnect recommended")
+
+                    # Phase-0: log session resumption handle updates
+                    # TODO(verify-sdk): session_resumption_update field may not exist in all SDK versions
+                    if hasattr(response, 'session_resumption_update') and response.session_resumption_update:
+                        sru = response.session_resumption_update
+                        new_handle = getattr(sru, 'new_handle', None)
+                        voice_logger.log("SESSION_RESUMPTION", f"Resumption handle updated new_handle={'<set>' if new_handle else '<none>'}")
+
                     # 1. Handle tool call requests
                     if response.tool_call:
                         t_tool_call = time.time()
@@ -828,6 +851,7 @@ async def live_voice_bridge(websocket: WebSocket):
                     if hasattr(response, 'data') and response.data:
                         chunk_len = len(response.data)
                         total_audio_bytes += chunk_len
+                        _turn_audio_chunks += 1  # Phase-0: per-turn chunk counter
                         if not first_chunk_received:
                             first_chunk_received = True
                             voice_logger.log("AUDIO_TTFB", f"First audio chunk received ({chunk_len} bytes)")
@@ -847,8 +871,22 @@ async def live_voice_bridge(websocket: WebSocket):
                     # 3. Handle server_content parts as robust fallback
                     if response.server_content:
                         if response.server_content.interrupted:
-                            voice_logger.log("INTERRUPTED", "User barge-in interrupted Nova speech.")
+                            voice_logger.log("INTERRUPTED", "User barge-in interrupted Nova speech. reason=server")
                             await websocket.send_json({"type": "INTERRUPTED"})
+
+                        # Phase-0: log input transcription length
+                        # TODO(verify-sdk): input_transcription field path may differ across google-genai versions
+                        if hasattr(response.server_content, 'input_transcription') and response.server_content.input_transcription:
+                            t_in = response.server_content.input_transcription
+                            t_text = getattr(t_in, 'text', '') or ''
+                            voice_logger.log("TRANSCRIPTION_IN", f"len={len(t_text)} finished={getattr(t_in, 'finished', None)}")
+
+                        # Phase-0: log output transcription length
+                        # TODO(verify-sdk): output_transcription field path may differ across google-genai versions
+                        if hasattr(response.server_content, 'output_transcription') and response.server_content.output_transcription:
+                            t_out = response.server_content.output_transcription
+                            t_text = getattr(t_out, 'text', '') or ''
+                            voice_logger.log("TRANSCRIPTION_OUT", f"len={len(t_text)} finished={getattr(t_out, 'finished', None)}")
 
                         model_turn = response.server_content.model_turn
                         if model_turn:
@@ -865,13 +903,14 @@ async def live_voice_bridge(websocket: WebSocket):
                                 if not has_sent_audio and part.inline_data and part.inline_data.data:
                                     chunk_len = len(part.inline_data.data)
                                     total_audio_bytes += chunk_len
+                                    _turn_audio_chunks += 1  # Phase-0: per-turn chunk counter
                                     if not first_chunk_received:
                                         first_chunk_received = True
                                         voice_logger.log("AUDIO_TTFB", f"First audio chunk received ({chunk_len} bytes)")
                                     await websocket.send_bytes(part.inline_data.data)
 
                         if response.server_content.turn_complete:
-                            voice_logger.log("TURN_COMPLETE", f"Model turn finished. Streamed {total_audio_bytes} audio bytes.")
+                            voice_logger.log("TURN_COMPLETE", f"Model turn finished. Streamed {total_audio_bytes} bytes in {_turn_audio_chunks} chunks.")
                             await websocket.send_json({"type": "TURN_COMPLETE"})
                             # Break inner generator loop for this turn; outer while True starts receive() for next turn!
                             break

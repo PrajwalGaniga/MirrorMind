@@ -11,6 +11,7 @@
 
 import { AudioWorkletCapture } from './audio-worklet-capture';
 import { AudioPlaybackManager } from './audio-playback-manager';
+import { voiceLog } from './logger';
 
 export class InterviewLiveClient {
   constructor({
@@ -50,6 +51,7 @@ export class InterviewLiveClient {
     this.lastChunkTime = 0;
     this.chunkCount = 0;
     this.hardwareSampleRate = 0;
+    this._lastRms = 0;
   }
 
   async start() {
@@ -60,7 +62,10 @@ export class InterviewLiveClient {
     // 1. Initialize microphone capture via AudioWorklet
     this.capture = new AudioWorkletCapture({
       onChunk: (pcmArrayBuffer) => this._handleOutgoingMicChunk(pcmArrayBuffer),
-      onLevel: (rms) => this.onMicLevel(rms),
+      onLevel: (rms) => {
+        this._lastRms = rms;
+        this.onMicLevel(rms);
+      },
       onReady: (info) => {
         this.hardwareSampleRate = info.hardwareRate;
         if (this.isConnected) {
@@ -70,13 +75,15 @@ export class InterviewLiveClient {
       onActivityStart: () => {
         if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
           console.log('[INTERVIEW] Candidate speech detected -> ACTIVITY_START');
+          voiceLog.push('INTERVIEW', 'ACTIVITY_START', { rms: this._lastRms?.toFixed(4) });
           this.ws.send(JSON.stringify({ type: 'ACTIVITY_START' }));
-          this.playback.flush();
+          this.playback.flush('activity_start');
         }
       },
       onActivityEnd: () => {
         if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
           console.log('[INTERVIEW] Candidate turn completed -> ACTIVITY_END');
+          voiceLog.push('INTERVIEW', 'ACTIVITY_END', {});
           this.ws.send(JSON.stringify({ type: 'ACTIVITY_END' }));
         }
       },
@@ -103,6 +110,7 @@ export class InterviewLiveClient {
         this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
+          voiceLog.push('INTERVIEW', 'WS_OPEN', {});
           console.log('[INTERVIEW][WS] Connected to live interview bridge.');
           this.isConnected = true;
           this.reconnectAttempts = 0;
@@ -132,11 +140,13 @@ export class InterviewLiveClient {
         };
 
         this.ws.onerror = (err) => {
+          voiceLog.push('INTERVIEW', 'WS_ERROR', {});
           console.error('[INTERVIEW][WS] WebSocket error:', err);
           this.onError('Live voice connection error');
         };
 
-        this.ws.onclose = () => {
+        this.ws.onclose = (event) => {
+          voiceLog.push('INTERVIEW', 'WS_CLOSE', { code: event?.code, reason: event?.reason });
           this.isConnected = false;
           this.onStatusChange('DISCONNECTED');
           this._scheduleReconnect();
@@ -181,7 +191,7 @@ export class InterviewLiveClient {
     if (type === 'INTERRUPTED') {
       // Immediate cancellation of active/queued AI audio playback
       console.log('[INTERVIEW] AI speech interrupted by candidate! Flushing playback queue.');
-      this.playback.flush();
+      this.playback.flush('server_interrupted');
       this.onInterrupted();
     } else if (type === 'TRANSCRIPT') {
       this.onTranscript({
@@ -214,6 +224,7 @@ export class InterviewLiveClient {
 
     this.reconnectAttempts++;
     const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts - 1), this.maxReconnectDelayMs);
+    voiceLog.push('INTERVIEW', 'RECONNECT_ATTEMPT', { attempt: this.reconnectAttempts, delayMs: delay });
     console.log(`[INTERVIEW][RECONNECT] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})...`);
     this.onStatusChange('RECONNECTING');
 
@@ -260,7 +271,7 @@ export class InterviewLiveClient {
       this.capture = null;
     }
     if (this.playback) {
-      this.playback.flush();
+      this.playback.flush('manual');
     }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {

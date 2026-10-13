@@ -5,6 +5,8 @@
  * Tracks every active AudioBufferSourceNode and flushes all audio instantly when interrupted.
  */
 
+import { voiceLog } from './logger';
+
 export class AudioPlaybackManager {
   constructor() {
     this.audioContext = null;
@@ -71,8 +73,10 @@ export class AudioPlaybackManager {
   /**
    * CRITICAL: Immediately stops and clears all scheduled and playing audio sources.
    * Resets nextStartTime so new AI speech begins with zero lag.
+   * @param {string} reason - Reason for flushing ('server_interrupted', 'activity_start', 'manual', etc.)
    */
-  flush() {
+  flush(reason = 'unknown') {
+    voiceLog.push('PLAYBACK', 'FLUSH', { reason, activeCount: this.activeSources.size });
     for (const source of this.activeSources) {
       try {
         source.onended = null;
@@ -88,7 +92,7 @@ export class AudioPlaybackManager {
   }
 
   close() {
-    this.flush();
+    this.flush('close');
     if (this.audioContext) {
       try {
         this.audioContext.close();

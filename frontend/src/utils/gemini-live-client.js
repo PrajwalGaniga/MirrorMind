@@ -10,6 +10,8 @@
  * - Real-time dual-direction audio level analysis for fluid wave visualization.
  */
 
+import { voiceLog } from './logger';
+
 export class GeminiLiveClient {
   constructor({
     onAudioLevel = () => {},
@@ -80,6 +82,7 @@ export class GeminiLiveClient {
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = async () => {
+        voiceLog.push('NOVA', 'WS_OPEN', { url: wsUrl });
         console.log('[NOVA][CLIENT] Persistent WebSocket connected to Gemini Live.');
         this.isConnected = true;
         this.onStatusChange('ACTIVE');
@@ -105,11 +108,13 @@ export class GeminiLiveClient {
       };
 
       this.ws.onerror = (err) => {
+        voiceLog.push('NOVA', 'WS_ERROR', {});
         console.error('[NOVA][CLIENT] WebSocket error:', err);
         this.onError('Live voice connection error.');
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = (event) => {
+        voiceLog.push('NOVA', 'WS_CLOSE', { code: event?.code, reason: event?.reason });
         console.log('[NOVA][CLIENT] WebSocket closed.');
         this.disconnect();
       };
@@ -133,6 +138,7 @@ export class GeminiLiveClient {
       this.onSilenceTick(Math.max(0, this.silenceSecondsRemaining));
 
       if (this.silenceSecondsRemaining <= 0) {
+        voiceLog.push('NOVA', 'SILENCE_TIMEOUT', { timeoutSeconds: this.silenceTimeoutSeconds });
         console.log(`[NOVA][CLIENT] ${this.silenceTimeoutSeconds}s silence timeout reached. Sleeping gracefully.`);
         this._stopSilenceWatchdog();
         this.onStatusChange('SILENCE_TIMEOUT');
@@ -191,7 +197,7 @@ export class GeminiLiveClient {
       this.onUIAction(data.action, data);
     } else if (type === 'INTERRUPTED') {
       console.log('[NOVA][CLIENT] Model playback interrupted.');
-      this._flushAudioPlayback();
+      this._flushAudioPlayback('server_interrupted');
       this.onStatusChange('INTERRUPTED');
     } else if (type === 'TURN_COMPLETE') {
       // KEEP WEBSOCKET OPEN! Do not disconnect on turn complete.
@@ -210,7 +216,7 @@ export class GeminiLiveClient {
    * Immediately stops active audio playback and notifies server.
    */
   interrupt() {
-    this._flushAudioPlayback();
+    this._flushAudioPlayback('manual');
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify({ type: 'INTERRUPT' }));
@@ -267,7 +273,8 @@ export class GeminiLiveClient {
 
         // Conversational Barge-In: if user speaks while agent is speaking, flush playback
         if (rms > 0.04 && this.activeSources.length > 0) {
-          this._flushAudioPlayback();
+          voiceLog.push('NOVA', 'LOCAL_RMS_BARGE_IN', { rms: rms.toFixed(4), activeSources: this.activeSources.length });
+          this._flushAudioPlayback('local_rms');
         }
 
         // Convert Float32 to 16-bit PCM Little Endian
@@ -398,8 +405,10 @@ export class GeminiLiveClient {
 
   /**
    * Stop active audio playback immediately when interrupted.
+   * @param {string} reason - Reason for flushing
    */
-  _flushAudioPlayback() {
+  _flushAudioPlayback(reason = 'unknown') {
+    voiceLog.push('NOVA', 'FLUSH', { reason, activeSources: this.activeSources.length });
     for (const src of this.activeSources) {
       try {
         src.stop();
@@ -436,7 +445,7 @@ export class GeminiLiveClient {
     this.isConnected = false;
     this._stopSilenceWatchdog();
     this._stopAudioMonitor();
-    this._flushAudioPlayback();
+    this._flushAudioPlayback('disconnect');
 
     if (this.micProcessor) {
       try {

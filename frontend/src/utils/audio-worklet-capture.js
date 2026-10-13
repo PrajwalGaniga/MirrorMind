@@ -5,6 +5,8 @@
  * streams downsampled 16kHz PCM16 chunks via callback, and measures mic RMS level.
  */
 
+import { voiceLog } from './logger';
+
 export class AudioWorkletCapture {
   constructor({
     onChunk = () => {},
@@ -146,6 +148,7 @@ export class AudioWorkletCapture {
             const avg = this.calibrationSamples.reduce((a, b) => a + b, 0) / this.calibrationSamples.length;
             this.noiseFloor = Math.max(0.003, avg);
             this.speechThreshold = Math.max(0.012, this.noiseFloor * this.thresholdMultiplier);
+            voiceLog.push('WORKLET', 'CALIBRATION_DONE', { noiseFloor: this.noiseFloor.toFixed(4), speechThreshold: this.speechThreshold.toFixed(4) });
             console.log(`[AUDIO][CALIBRATION] Noise Floor: ${this.noiseFloor.toFixed(4)} | Adaptive Speech Threshold: ${this.speechThreshold.toFixed(4)} (factor=${this.thresholdMultiplier})`);
           }
         }
@@ -154,6 +157,7 @@ export class AudioWorkletCapture {
         if (rms >= this.speechThreshold) {
           if (!this.isUserSpeaking) {
             this.isUserSpeaking = true;
+            voiceLog.push('WORKLET', 'ACTIVITY_START', { rms: rms.toFixed(4), threshold: this.speechThreshold.toFixed(4) });
             this.onActivityStart();
           }
           if (this.silenceTimeoutId) {
@@ -165,6 +169,7 @@ export class AudioWorkletCapture {
             this.silenceTimeoutId = setTimeout(() => {
               this.isUserSpeaking = false;
               this.silenceTimeoutId = null;
+              voiceLog.push('WORKLET', 'ACTIVITY_END', { pauseToleranceMs: this.pauseToleranceMs });
               this.onActivityEnd();
             }, this.pauseToleranceMs);
           }
