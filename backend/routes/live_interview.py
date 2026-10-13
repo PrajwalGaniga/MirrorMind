@@ -89,33 +89,33 @@ def get_gemini_api_keys() -> List[str]:
     return keys
 
 
-def _get_env_sensitivity(env_val: str, default_high: bool = True) -> Any:
-    val = (env_val or "").strip().upper()
-    if "LOW" in val:
-        return types.StartSensitivity.START_SENSITIVITY_LOW
+def _get_env_sensitivity(env_val: str, default: str = "LOW") -> Any:
+    val = (env_val or default).strip().upper()
+    if "HIGH" in val:
+        return types.StartSensitivity.START_SENSITIVITY_HIGH
     if "UNSPECIFIED" in val:
         return types.StartSensitivity.START_SENSITIVITY_UNSPECIFIED
-    return types.StartSensitivity.START_SENSITIVITY_HIGH
+    return types.StartSensitivity.START_SENSITIVITY_LOW
 
 
-def _get_env_end_sensitivity(env_val: str) -> Any:
-    val = (env_val or "").strip().upper()
-    if "LOW" in val:
-        return types.EndSensitivity.END_SENSITIVITY_LOW
+def _get_env_end_sensitivity(env_val: str, default: str = "LOW") -> Any:
+    val = (env_val or default).strip().upper()
+    if "HIGH" in val:
+        return types.EndSensitivity.END_SENSITIVITY_HIGH
     if "UNSPECIFIED" in val:
         return types.EndSensitivity.END_SENSITIVITY_UNSPECIFIED
-    return types.EndSensitivity.END_SENSITIVITY_HIGH
+    return types.EndSensitivity.END_SENSITIVITY_LOW
 
 
 def build_interview_config(resumption_handle: Optional[str] = None) -> types.LiveConnectConfig:
     """Builds typed LiveConnectConfig pinned strictly to English (en-US) transcription."""
-    silence_duration = int(os.getenv("VAD_SILENCE_DURATION_MS", "600"))
-    prefix_padding = int(os.getenv("VAD_PREFIX_PADDING_MS", "100"))
-    start_sens = _get_env_sensitivity(os.getenv("VAD_START_SENSITIVITY", "HIGH"))
-    end_sens = _get_env_end_sensitivity(os.getenv("VAD_END_SENSITIVITY", "HIGH"))
+    silence_duration = int(os.getenv("INTERVIEW_SILENCE_MS", os.getenv("VAD_SILENCE_DURATION_MS", "1800")))
+    prefix_padding = int(os.getenv("INTERVIEW_PREFIX_PADDING_MS", os.getenv("VAD_PREFIX_PADDING_MS", "200")))
+    start_sens = _get_env_sensitivity(os.getenv("INTERVIEW_START_SENSITIVITY", os.getenv("VAD_START_SENSITIVITY", "LOW")))
+    end_sens = _get_env_end_sensitivity(os.getenv("INTERVIEW_END_SENSITIVITY", os.getenv("VAD_END_SENSITIVITY", "LOW")))
     target_tokens = int(os.getenv("TARGET_COMPRESSION_TOKENS", "4096"))
     voice_name = os.getenv("GEMINI_VOICE_NAME", "Aoede")
-    use_manual_vad = os.getenv("USE_MANUAL_VAD", "true").lower() == "true"
+    use_manual_vad = os.getenv("USE_MANUAL_VAD", "false").lower() == "true"
 
     resumption_config = types.SessionResumptionConfig(
         handle=resumption_handle,
@@ -380,7 +380,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
     # ── Task 1: Browser -> Audio Queue & Control Messages ────────────────────
     async def browser_to_queue():
         nonlocal t_speech_ended, turn_counter, t_turn_start, has_greeted
-        use_manual_vad = os.getenv("USE_MANUAL_VAD", "true").lower() == "true"
+        use_manual_vad = os.getenv("USE_MANUAL_VAD", "false").lower() == "true"
         _turn_cand_chunks = 0
         try:
             while True:

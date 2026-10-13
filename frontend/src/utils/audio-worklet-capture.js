@@ -16,7 +16,7 @@ export class AudioWorkletCapture {
     onReady = () => {},
     onError = () => {},
     pauseToleranceMs = 2800,
-    enableVAD = true,
+    enableVAD = false,
   } = {}) {
     this.onChunk = onChunk;
     this.onLevel = onLevel;
@@ -133,11 +133,12 @@ export class AudioWorkletCapture {
       };
 
       this.isRecording = true;
-      this.isCalibrating = this.enableVAD;
-      this.calibrationSamples = [];
-      const calibrationEnd = performance.now() + 2000; // First 2 seconds of session noise
-
-      this._startLevelMonitor(calibrationEnd);
+      if (this.enableVAD) {
+        this.isCalibrating = true;
+        this.calibrationSamples = [];
+        const calibrationEnd = performance.now() + 2000; // First 2 seconds of session noise
+        this._startLevelMonitor(calibrationEnd);
+      }
 
       return {
         sampleRate: this.audioContext.sampleRate,

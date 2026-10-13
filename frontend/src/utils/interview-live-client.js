@@ -19,6 +19,7 @@ export class InterviewLiveClient {
     candidateName,
     userId,
     token,
+    useManualVad,
     onStatusChange = () => {},
     onTranscript = () => {},
     onInterrupted = () => {},
@@ -31,6 +32,9 @@ export class InterviewLiveClient {
     this.candidateName = candidateName;
     this.userId = userId;
     this.token = token;
+    this.useManualVad = (useManualVad !== undefined)
+      ? Boolean(useManualVad)
+      : (import.meta.env?.VITE_USE_MANUAL_VAD === 'true');
     this.onStatusChange = onStatusChange;
     this.onTranscript = onTranscript;
     this.onInterrupted = onInterrupted;
@@ -61,6 +65,7 @@ export class InterviewLiveClient {
 
     // 1. Initialize microphone capture via AudioWorklet
     this.capture = new AudioWorkletCapture({
+      enableVAD: this.useManualVad,
       onChunk: (pcmArrayBuffer) => this._handleOutgoingMicChunk(pcmArrayBuffer),
       onLevel: (rms) => {
         this._lastRms = rms;
@@ -73,14 +78,15 @@ export class InterviewLiveClient {
         }
       },
       onActivityStart: () => {
+        if (!this.useManualVad) return;
         if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
           console.log('[INTERVIEW] Candidate speech detected -> ACTIVITY_START');
           voiceLog.push('INTERVIEW', 'ACTIVITY_START', { rms: this._lastRms?.toFixed(4) });
           this.ws.send(JSON.stringify({ type: 'ACTIVITY_START' }));
-          this.playback.flush('activity_start');
         }
       },
       onActivityEnd: () => {
+        if (!this.useManualVad) return;
         if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
           console.log('[INTERVIEW] Candidate turn completed -> ACTIVITY_END');
           voiceLog.push('INTERVIEW', 'ACTIVITY_END', {});

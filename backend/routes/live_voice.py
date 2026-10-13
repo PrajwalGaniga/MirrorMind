@@ -259,6 +259,24 @@ async def _resolve_user_info(websocket: WebSocket):
     return user_id, user_name, student_doc
 
 
+def _get_env_sensitivity(env_val: str, default: str = "LOW") -> Any:
+    val = (env_val or default).strip().upper()
+    if "HIGH" in val:
+        return types.StartSensitivity.START_SENSITIVITY_HIGH
+    if "UNSPECIFIED" in val:
+        return types.StartSensitivity.START_SENSITIVITY_UNSPECIFIED
+    return types.StartSensitivity.START_SENSITIVITY_LOW
+
+
+def _get_env_end_sensitivity(env_val: str, default: str = "LOW") -> Any:
+    val = (env_val or default).strip().upper()
+    if "HIGH" in val:
+        return types.EndSensitivity.END_SENSITIVITY_HIGH
+    if "UNSPECIFIED" in val:
+        return types.EndSensitivity.END_SENSITIVITY_UNSPECIFIED
+    return types.EndSensitivity.END_SENSITIVITY_LOW
+
+
 @router.websocket("/live")
 async def live_voice_bridge(websocket: WebSocket):
     t_ws_connect = time.time()
@@ -286,6 +304,11 @@ async def live_voice_bridge(websocket: WebSocket):
 
     system_instruction = build_personalized_instruction(student_doc, user_name)
 
+    nova_start_sens = _get_env_sensitivity(os.getenv("NOVA_START_SENSITIVITY", "LOW"))
+    nova_end_sens = _get_env_end_sensitivity(os.getenv("NOVA_END_SENSITIVITY", "LOW"))
+    nova_silence_ms = int(os.getenv("NOVA_SILENCE_MS", "1000"))
+    nova_prefix_padding_ms = int(os.getenv("NOVA_PREFIX_PADDING_MS", "200"))
+
     config = types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
         tools=NOVA_TOOLS,
@@ -303,10 +326,10 @@ async def live_voice_bridge(websocket: WebSocket):
         realtime_input_config=types.RealtimeInputConfig(
             automatic_activity_detection=types.AutomaticActivityDetection(
                 disabled=False,
-                start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
-                end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_HIGH,
-                prefix_padding_ms=100,
-                silence_duration_ms=2500,  # 2.5s gives ample natural pause time without cutting user off
+                start_of_speech_sensitivity=nova_start_sens,
+                end_of_speech_sensitivity=nova_end_sens,
+                prefix_padding_ms=nova_prefix_padding_ms,
+                silence_duration_ms=nova_silence_ms,
             ),
             activity_handling=types.ActivityHandling.START_OF_ACTIVITY_INTERRUPTS
         ),
