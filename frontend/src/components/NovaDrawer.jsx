@@ -271,6 +271,7 @@ export default function NovaDrawer() {
                 <span style={styles.statusDot} /> Online · Real-Time Co-Pilot
               </div>
             </div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button
               onClick={toggleSpeakerMode}
