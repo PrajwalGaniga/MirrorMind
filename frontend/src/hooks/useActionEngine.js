@@ -199,7 +199,8 @@ export function useActionEngine({ navigate, user, onSpeak, onSetVoiceState }) {
         workflow_id: workflow.id,
         collected_data: data,
         edit_instruction: editInstruction,
-        provider: 'openrouter'
+        provider: 'gemini'
+
       });
       
       const normalizedData = res.data.normalized;

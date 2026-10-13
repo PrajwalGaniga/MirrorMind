@@ -1,10 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Loader2, Cloud, Monitor } from 'lucide-react';
-import { audioMeter } from '../utils/audio-meter';
 import VoiceDiagnosticsPanel from './VoiceDiagnosticsPanel';
-
-// ── Constants ──────────────────────────────────────────────────────────────
-const BAR_COUNT = 10;
+import NovaWaveVisualizer from './NovaWaveVisualizer';
 
 // Maps voiceState → panel CSS modifier class
 function panelClass(voiceState, wakeStatus) {
@@ -13,6 +10,8 @@ function panelClass(voiceState, wakeStatus) {
     return wakeStatus === 'RECONNECTING' ? 'state-reconnecting' : 'state-listening';
   }
   if (voiceState === 'WAKE_DETECTED') return 'state-detected';
+  if (voiceState === 'NOVA_LIVE_ACTIVE') return 'state-nova-live';
+  if (voiceState === 'NOVA_TOOL_CALLING') return 'state-thinking';
   if (voiceState === 'GREETING') return 'state-speaking';
   if (voiceState === 'LISTENING_FOR_QUERY') return 'state-listening';
   if (voiceState === 'TRANSCRIBING') return 'state-thinking';
@@ -45,53 +44,16 @@ function MicBadge({ status }) {
   );
 }
 
-// ── Live audio meter ────────────────────────────────────────────────────────
-function AudioMeter({ active }) {
-  const barsRef = useRef([]);
-  const rafRef  = useRef(null);
-
-  const animate = useCallback(() => {
-    if (!active) return;
-    const level = audioMeter.getLevel(); // 0–1
-    barsRef.current.forEach((bar, i) => {
-      if (!bar) return;
-      // Create a natural-looking bar pattern centred on i=BAR_COUNT/2
-      const offset = Math.abs(i - BAR_COUNT / 2) / (BAR_COUNT / 2); // 0 at centre
-      const noise  = (Math.random() * 0.15);                         // tiny flicker
-      const height = Math.max(3, (level * (1 - offset * 0.5) + noise) * 30);
-      bar.style.height = `${height}px`;
-    });
-    rafRef.current = requestAnimationFrame(animate);
-  }, [active]);
-
-  useEffect(() => {
-    if (active) {
-      rafRef.current = requestAnimationFrame(animate);
-    } else {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      // Reset bars to baseline
-      barsRef.current.forEach(bar => { if (bar) bar.style.height = '3px'; });
-    }
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [active, animate]);
-
-  return (
-    <div className="audio-meter" aria-hidden="true">
-      {Array.from({ length: BAR_COUNT }, (_, i) => (
-        <div
-          key={i}
-          className="audio-meter-bar"
-          ref={el => { barsRef.current[i] = el; }}
-          style={{ height: '3px' }}
-        />
-      ))}
-    </div>
-  );
-}
-
 // ── Provider badge (inside panel) ──────────────────────────────────────────
 function ProviderTag({ provider }) {
   if (!provider) return null;
+  if (provider === 'gemini') {
+    return (
+      <span className="vsp-provider gemini" style={{ color: '#2563eb', background: 'rgba(37,99,235,0.08)' }}>
+        ✨ Gemini 3.1 Flash Lite
+      </span>
+    );
+  }
   if (provider === 'ollama') {
     return (
       <span className="vsp-provider ollama">
@@ -106,37 +68,34 @@ function ProviderTag({ provider }) {
   );
 }
 
-// ── Main panel ─────────────────────────────────────────────────────────────
 /**
- * VoiceStatePanel — renders the full voice-state UI when Hands-Free mode is ON.
- *
- * Props:
- *   voiceState        string  — current voice FSM state
- *   wakeStatus        string  — ACTIVE | RECONNECTING | STOPPED | MIC_ERROR
- *   pendingTranscript string  — transcript waiting for confirmation
- *   provider          string  — 'openrouter' | 'ollama'
- *   voiceError        string  — error message when voiceState === 'ERROR'
- *   diagnostics       object  — voice pipeline debug info
+ * VoiceStatePanel — renders the hands-free voice interface with the Nova fluid wave.
  */
 export default function VoiceStatePanel({
   voiceState,
   wakeStatus,
   pendingTranscript,
+  novaResponseText = '',
   provider,
   voiceError,
-  diagnostics
+  diagnostics,
+  liveAudioLevel = 0,
+  liveSpeaker = 'idle',
+  silenceSeconds = null,
+  onEndLiveSession,
 }) {
-  const meterActive =
-    voiceState === 'WAKE_LISTENING' ||
-    voiceState === 'LISTENING_FOR_QUERY' ||
-    voiceState === 'ACTION_COLLECTING';
+  const isNovaLive =
+    voiceState === 'NOVA_LIVE_ACTIVE' ||
+    voiceState === 'NOVA_TOOL_CALLING';
+
+  const isWakeListening = voiceState === 'WAKE_LISTENING';
 
   const reconnecting =
     voiceState === 'WAKE_LISTENING' && wakeStatus === 'RECONNECTING';
 
   const pClass = panelClass(voiceState, wakeStatus);
 
-  // ── State-specific content ───────────────────────────────────────────────
+  // ── State-specific header labels ─────────────────────────────────────────
   let icon, label, sublabel, extraContent;
 
   if (reconnecting) {
@@ -147,17 +106,27 @@ export default function VoiceStatePanel({
     switch (voiceState) {
       case 'WAKE_LISTENING':
         icon = '🟢';
-        label = 'MIRRORMIND IS LISTENING';
-        sublabel = 'Say "Hello MirrorMind"';
+        label = 'NOVA IS LISTENING';
+        sublabel = 'Say "Hey Nova" or "Hello Nova" to talk';
         break;
       case 'WAKE_DETECTED':
         icon = '✨';
-        label = 'Wake word detected!';
-        sublabel = 'Getting ready…';
+        label = 'Nova wake word detected!';
+        sublabel = 'Connecting persistent audio stream…';
+        break;
+      case 'NOVA_LIVE_ACTIVE':
+        icon = '🎙️';
+        label = 'NOVA LIVE AUDIO STREAMING';
+        sublabel = 'Talk naturally to update your portfolio, query RAG, or navigate';
+        break;
+      case 'NOVA_TOOL_CALLING':
+        icon = '🛠️';
+        label = 'Nova is taking action…';
+        sublabel = 'Saving data via Gemini 3.1 Flash Lite';
         break;
       case 'GREETING':
         icon = '🔊';
-        label = 'MirrorMind is greeting you…';
+        label = 'Nova is greeting you…';
         break;
       case 'LISTENING_FOR_QUERY':
         icon = '🎤';
@@ -229,7 +198,27 @@ export default function VoiceStatePanel({
   }
 
   return (
-    <div>
+    <div style={{ marginBottom: 20 }}>
+      {/* ── Nova Voice Wave Visualizer (Matches Reference Images) ── */}
+      {isNovaLive ? (
+        <NovaWaveVisualizer
+          active={true}
+          amplitude={liveAudioLevel}
+          speaker={liveSpeaker}
+          height={160}
+          silenceSeconds={silenceSeconds}
+          onEndSession={onEndLiveSession}
+        />
+      ) : isWakeListening ? (
+        <NovaWaveVisualizer
+          active={false}
+          amplitude={0}
+          speaker="idle"
+          height={90}
+          silenceSeconds={null}
+        />
+      ) : null}
+
       <div className={`voice-state-panel ${pClass}`} role="status" aria-live="polite">
         {/* Header row: icon + label + mic badge */}
         <div className="vsp-header">
@@ -238,21 +227,64 @@ export default function VoiceStatePanel({
             <div className="vsp-label">{label}</div>
             {sublabel && <div className="vsp-sublabel">{sublabel}</div>}
           </div>
-          <MicBadge status={
-            voiceState === 'ERROR' && wakeStatus === 'MIC_ERROR' ? 'MIC_ERROR' :
-            meterActive ? 'ACTIVE' :
-            reconnecting ? 'RECONNECTING' :
-            wakeStatus
-          } />
+          <MicBadge
+            status={
+              voiceState === 'ERROR' && wakeStatus === 'MIC_ERROR'
+                ? 'MIC_ERROR'
+                : isNovaLive || isWakeListening
+                ? 'ACTIVE'
+                : reconnecting
+                ? 'RECONNECTING'
+                : wakeStatus
+            }
+          />
         </div>
 
-        {/* Live audio meter — only when mic is actually open */}
-        {meterActive && <AudioMeter active={meterActive} />}
+        {/* Live speech from user (shows words as user is talking) */}
+        {pendingTranscript && (
+          <div
+            style={{
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'rgba(37,99,235,0.06)',
+              border: '1px solid rgba(37,99,235,0.25)',
+              fontSize: 14,
+              color: '#1e293b',
+              lineHeight: 1.5,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'baseline',
+            }}
+          >
+            <strong style={{ color: '#2563eb', flexShrink: 0 }}>🎙️ You:</strong>
+            <span style={{ color: '#0f172a', fontWeight: 500 }}>"{pendingTranscript}"</span>
+          </div>
+        )}
+
+        {/* Word-by-word streaming response from Nova */}
+        {novaResponseText && (
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, rgba(0,242,254,0.08) 0%, rgba(37,99,235,0.06) 100%)',
+              border: '1px solid rgba(0,242,254,0.3)',
+              fontSize: 14,
+              color: '#0f172a',
+              lineHeight: 1.6,
+            }}
+          >
+            <div style={{ color: '#0284c7', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>✨ Nova:</span>
+            </div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{novaResponseText}</div>
+          </div>
+        )}
 
         {/* Extra content (transcript, provider badge) */}
         {extraContent}
       </div>
-      
+
       {diagnostics && <VoiceDiagnosticsPanel diagnostics={diagnostics} />}
     </div>
   );

@@ -4,8 +4,8 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/student_provider.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
-import '../projects/projects_screen.dart';
-import '../internships/internships_screen.dart';
+import '../intelligence/intelligence_screen.dart';
+import '../documents/documents_screen.dart';
 import '../predict/predict_screen.dart';
 
 class MainScaffold extends StatefulWidget {
@@ -20,9 +20,9 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    ProjectsScreen(),
+    IntelligenceScreen(),
     PredictScreen(),
-    InternshipsScreen(),
+    DocumentsScreen(),
     ProfileScreen(),
   ];
 
@@ -57,9 +57,9 @@ class _MainScaffoldState extends State<MainScaffold> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _navItem(0, Icons.home_rounded, 'Home'),
-            _navItem(1, Icons.folder_rounded, 'Projects'),
+            _navItem(1, Icons.mic_rounded, 'AI Voice'),
             _navItem(2, Icons.auto_awesome_rounded, 'Predict'),
-            _navItem(3, Icons.work_rounded, 'Internships'),
+            _navItem(3, Icons.folder_shared_rounded, 'Docs'),
             _navItem(4, Icons.person_rounded, 'Profile'),
           ],
         ),
@@ -74,7 +74,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? AppTheme.lavender : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
@@ -85,12 +85,14 @@ class _MainScaffoldState extends State<MainScaffold> {
           children: [
             Icon(icon, size: 24, color: AppTheme.borderBlack),
             const SizedBox(height: 2),
-            Text(label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.borderBlack,
-                )),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.borderBlack,
+              ),
+            ),
           ],
         ),
       ),

@@ -1,0 +1,26 @@
+{
+  "session_id": "interview_1791896659100",
+  "user_id": null,
+  "candidate_name": "Candidate",
+  "created_at": "2026-10-13T13:05:34.959358",
+  "transcript": [
+    {
+      "role": "assistant",
+      "text": "Hello Prajjwal. Let's begin. Can you describe the main differences between process-based and thread-based concurrency?",
+      "is_final": true,
+      "timestamp": "2026-10-13T13:04:40.770014"
+    },
+    {
+      "role": "assistant",
+      "text": "I didn't quite catch that. Could you please repeat your answer in English?",
+      "is_final": true,
+      "timestamp": "2026-10-13T13:04:48.543904"
+    },
+    {
+      "role": "assistant",
+      "text": "In terms of memory space and overhead, how do processes and threads compare?",
+      "is_final": true,
+      "timestamp": "2026-10-13T13:05:27.650836"
+    }
+  ]
+}

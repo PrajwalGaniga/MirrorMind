@@ -1,35 +1,105 @@
 import os
+import asyncio
 import httpx
 import time
 from typing import Dict, Any, List
+from google import genai
+from google.genai import types
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-VALID_PROVIDERS = {"openrouter", "ollama"}
+VALID_PROVIDERS = {"gemini", "openrouter", "ollama"}
 
 
 async def call_llm(messages: List[Dict[str, str]], provider: str | None = None) -> tuple[str, float]:
     """
     Sends a chat completion request to the specified LLM provider.
-    provider: 'openrouter' or 'ollama'. If None, falls back to LLM_PROVIDER env var.
+    provider: 'gemini', 'openrouter', or 'ollama'. If None, falls back to LLM_PROVIDER env var (defaults to 'gemini').
     Returns (answer, llm_ms).
-    NO silent fallback — if the selected provider fails, the error propagates.
     """
     if provider is None:
-        provider = os.getenv("LLM_PROVIDER", "openrouter").lower()
+        provider = os.getenv("LLM_PROVIDER", "gemini").lower()
 
     if provider not in VALID_PROVIDERS:
         raise ValueError(f"Invalid provider '{provider}'. Must be one of: {', '.join(VALID_PROVIDERS)}")
 
     start_time = time.time()
 
-    if provider == "ollama":
+    if provider == "gemini":
+        ans = await _call_gemini(messages)
+    elif provider == "ollama":
         ans = await _call_ollama(messages)
     else:
         ans = await _call_openrouter(messages)
 
     llm_ms = (time.time() - start_time) * 1000
     return ans, llm_ms
+
+
+async def _call_gemini(messages: List[Dict[str, str]]) -> str:
+    api_key = os.getenv("GEMINI_PAID_API_KEY") or os.getenv("GEMINI_API_KEY_RAG_DB") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_PAID_API_KEY or GEMINI_API_KEY is not configured.")
+
+    primary_model = os.getenv("GEMINI_RAG_MODEL", "gemini-3.1-flash-lite").strip()
+    candidate_models = [primary_model]
+    for fallback in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-pro-preview"]:
+        if fallback not in candidate_models:
+            candidate_models.append(fallback)
+
+
+    system_prompt = None
+    user_contents = []
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "system":
+            system_prompt = content
+        elif role == "user":
+            user_contents.append(content)
+        elif role == "assistant":
+            user_contents.append(f"Assistant: {content}")
+
+    full_prompt = "\n\n".join(user_contents)
+
+    client = genai.Client(api_key=api_key)
+    config = types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        temperature=0.3
+    ) if system_prompt else types.GenerateContentConfig(temperature=0.3)
+
+    last_error = None
+    for model in candidate_models:
+        print(f"\n[MIRRORMIND][GEMINI]\nmodel={model}\nrequest_started=true\n")
+        try:
+            gemini_start = time.time()
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=model,
+                contents=full_prompt,
+                config=config
+            )
+            gemini_ms = (time.time() - gemini_start) * 1000
+            print(f"[MIRRORMIND][GEMINI]\nmodel={model}\nresponse_received=true\n")
+            print(f"[MIRRORMIND][TIMING]\ngemini_ms={gemini_ms:.0f}\n")
+            if response and response.text:
+                return response.text.strip()
+            else:
+                raise RuntimeError("Empty response received from Gemini.")
+        except Exception as e:
+            err_str = str(e)
+            last_error = err_str
+            print(f"[MIRRORMIND][GEMINI][WARNING]\nmodel={model} failed: {err_str}")
+            # If 503 unavailable or 429 quota, try next candidate model
+            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                continue
+            # For other fatal errors like invalid key, raise immediately
+            if "API_KEY_INVALID" in err_str or "400" in err_str or "401" in err_str:
+                raise RuntimeError(f"Gemini API Error: {err_str}")
+            continue
+
+    print(f"\n[MIRRORMIND][GEMINI][ERROR]\ntype=AllGeminiModelsFailed\nlast_error={last_error}\n")
+    raise RuntimeError(f"Gemini generation failed on all models. Last error: {last_error}")
 
 
 async def _call_ollama(messages: List[Dict[str, str]]) -> str:

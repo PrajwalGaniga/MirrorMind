@@ -18,17 +18,29 @@
  */
 
 // ── Wake-phrase patterns ────────────────────────────────────────────────────
-// Matches:  "hello mirrormind"  "hello mirror mind"
-//           "hey mirrormind"    "hey mirror mind"
-// Case-insensitive; caller should normalize the transcript first.
+// Matches: "hey nova", "hello nova", "hi nova", "ok nova", "okay nova", "nova"
+// Also tolerant to speech recognition mis-transcriptions like "hey noba", "hey nora", "hey noah"
+// Also supports legacy: "hello mirrormind", "hey mirrormind", "mirrormind"
 const WAKE_PATTERNS = [
-  /hello\s+mirror\s*mind/,
-  /hey\s+mirror\s*mind/,
+  /\bhey\s+nova\b/i,
+  /\bhello\s+nova\b/i,
+  /\bhi\s+nova\b/i,
+  /\bok\s+nova\b/i,
+  /\bokay\s+nova\b/i,
+  /\byo\s+nova\b/i,
+  /\bhey\s+no[bv]a\b/i,
+  /\bhello\s+no[bv]a\b/i,
+  /\bhey\s+nora\b/i,
+  /\bhey\s+noah\b/i,
+  /\bnova\b/i,
+  /\bhey\s+mirror\s*mind\b/i,
+  /\bhello\s+mirror\s*mind\b/i,
+  /\bmirror\s*mind\b/i,
 ];
 
 /** Normalize transcript: lowercase, strip punctuation, collapse whitespace */
-function normalize(raw) {
-  return raw
+export function normalizeTranscript(raw) {
+  return (raw || '')
     .toLowerCase()
     .replace(/[^\w\s]/g, '')   // strip punctuation
     .replace(/\s+/g, ' ')      // collapse spaces
@@ -37,8 +49,42 @@ function normalize(raw) {
 
 /** Returns true if the normalized transcript contains a valid wake phrase */
 export function matchesWakePhrase(transcript) {
-  const n = normalize(transcript);
+  const n = normalizeTranscript(transcript);
   return WAKE_PATTERNS.some((p) => p.test(n));
+}
+
+/**
+ * Extracts wake phrase match and any subsequent query spoken in the same breath.
+ * E.g., "Hey Nova show me my projects" => { matched: true, wakePhrase: "hey nova", query: "show me my projects" }
+ */
+export function extractWakeQuery(transcript) {
+  const n = normalizeTranscript(transcript);
+  for (const pattern of WAKE_PATTERNS) {
+    const match = n.match(pattern);
+    if (match) {
+      const matchIndex = match.index || 0;
+      const matchLength = match[0].length;
+      const query = n.slice(matchIndex + matchLength).trim();
+      return { matched: true, wakePhrase: match[0], query };
+    }
+  }
+  return { matched: false, wakePhrase: '', query: '' };
+}
+
+/**
+ * Prompts user for browser microphone permission if not already granted.
+ * This guarantees Chrome/Edge allows SpeechRecognition to run in background.
+ */
+export async function requestMicrophonePermission() {
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) return false;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+    return true;
+  } catch (err) {
+    console.warn('[MIRRORMIND][WAKE] Microphone permission denied or prompt rejected:', err);
+    return false;
+  }
 }
 
 // ── Restart backoff configuration ───────────────────────────────────────────
@@ -99,7 +145,7 @@ export class WakeRecognitionManager {
     // Always create a fresh instance — avoids state machine corruption on reuse.
     const rec = new SpeechRecognition();
     rec.continuous = true;
-    rec.interimResults = false;
+    rec.interimResults = (this._mode === 'query');
     rec.lang = 'en-US';
     rec.maxAlternatives = 1;
 
@@ -111,11 +157,22 @@ export class WakeRecognitionManager {
 
     rec.onresult = (event) => {
       if (!this._active) return;
-      const last = event.results.length - 1;
-      const raw = event.results[last][0].transcript;
-      const normalized = normalize(raw);
-      console.log(`[MIRRORMIND][WAKE_MGR] heard="${normalized}" mode=${this._mode}`);
-      this._onResult(normalized, this._mode);
+      if (this._mode === 'query') {
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript + ' ';
+        }
+        const text = fullTranscript.trim();
+        if (text) {
+          this._onResult(text, 'query');
+        }
+      } else {
+        const last = event.results.length - 1;
+        const raw = event.results[last][0].transcript;
+        const normalized = normalize(raw);
+        console.log(`[MIRRORMIND][WAKE_MGR] heard="${normalized}" mode=${this._mode}`);
+        this._onResult(normalized, this._mode);
+      }
     };
 
     rec.onerror = (event) => {

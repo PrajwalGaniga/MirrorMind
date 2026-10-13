@@ -1,0 +1,122 @@
+{
+  "session_id": "interview_1790777991841",
+  "user_id": null,
+  "candidate_name": "Candidate",
+  "created_at": "2026-09-30T14:20:08.666088",
+  "transcript": [
+    {
+      "role": "assistant",
+      "text": "Hi, it's",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:58.928189"
+    },
+    {
+      "role": "assistant",
+      "text": " great",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:59.249777"
+    },
+    {
+      "role": "assistant",
+      "text": " to meet",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:59.433084"
+    },
+    {
+      "role": "assistant",
+      "text": " you.",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:59.461082"
+    },
+    {
+      "role": "assistant",
+      "text": " To begin,",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:59.546527"
+    },
+    {
+      "role": "assistant",
+      "text": " can",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:59.549483"
+    },
+    {
+      "role": "assistant",
+      "text": " you explain",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:19:59.800028"
+    },
+    {
+      "role": "assistant",
+      "text": " the concept",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.033142"
+    },
+    {
+      "role": "assistant",
+      "text": " of a",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.227029"
+    },
+    {
+      "role": "assistant",
+      "text": " critical",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.283424"
+    },
+    {
+      "role": "assistant",
+      "text": " section",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.436170"
+    },
+    {
+      "role": "assistant",
+      "text": " and",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.596016"
+    },
+    {
+      "role": "assistant",
+      "text": " how",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.695712"
+    },
+    {
+      "role": "assistant",
+      "text": " you ensure",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.732370"
+    },
+    {
+      "role": "assistant",
+      "text": " mutual",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:00.911824"
+    },
+    {
+      "role": "assistant",
+      "text": " exclusion",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:01.007666"
+    },
+    {
+      "role": "assistant",
+      "text": " in a",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:01.148982"
+    },
+    {
+      "role": "assistant",
+      "text": " real-time",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:01.215244"
+    },
+    {
+      "role": "assistant",
+      "text": " environment?",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:20:01.331025"
+    }
+  ]
+}

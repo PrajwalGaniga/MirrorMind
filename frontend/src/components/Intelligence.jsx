@@ -13,6 +13,7 @@ import DocumentViewer from './DocumentViewer';
 import { useActionEngine } from '../hooks/useActionEngine';
 import { detectIntent, isActionIntent } from '../utils/intentDetector';
 import { normalizeCommand } from '../utils/commandNormalizer';
+import { GeminiLiveClient } from '../utils/gemini-live-client';
 import { useNavigate } from 'react-router-dom';
 
 // ── Animated dots helper ───────────────────────────────────────────────────
@@ -32,6 +33,13 @@ function AnimatedMessage({ icon, text }) {
 
 // ── Processing stage definitions ───────────────────────────────────────────
 const STAGES = {
+  gemini: [
+    { icon: '🔎', text: 'Understanding your question' },
+    { icon: '📚', text: 'Searching your profile and documents' },
+    { icon: '🧠', text: 'Building personalized context' },
+    { icon: '✨', text: 'Consulting Gemini 3.1 Flash Lite' },
+    { icon: '📝', text: 'Preparing your answer' },
+  ],
   openrouter: [
     { icon: '🔎', text: 'Understanding your question' },
     { icon: '📚', text: 'Searching your profile and documents' },
@@ -50,6 +58,7 @@ const STAGES = {
 };
 
 const STAGE_DELAYS = {
+  gemini:     [600, 800, 800, 0, 0],
   openrouter: [800, 1200, 1000, 0, 0],
   ollama:     [800, 1200, 1000, 1200, 0, 0],
 };
@@ -107,6 +116,13 @@ const FormattedResponse = ({ text }) => {
 
 // ── Provider badge ─────────────────────────────────────────────────────────
 function ProviderBadge({ provider, model }) {
+  if (provider === 'gemini') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(37,99,235,0.12)', color: '#2563eb', borderRadius: 20, fontSize: 13, fontWeight: 600 }}>
+        ✨ Gemini · {model || 'gemini-3.1-flash-lite'}
+      </span>
+    );
+  }
   if (provider === 'ollama') {
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(82,196,26,0.12)', color: '#52c41a', borderRadius: 20, fontSize: 13, fontWeight: 600 }}>
@@ -124,7 +140,8 @@ function ProviderBadge({ provider, model }) {
 // ── Main component ─────────────────────────────────────────────────────────
 export default function Intelligence() {
   const [question, setQuestion]           = useState('');
-  const [provider, setProvider]           = useState('openrouter');
+  const [provider, setProvider]           = useState('gemini');
+
   const [loading, setLoading]             = useState(false);
   const [stageIndex, setStageIndex]       = useState(0);
   const [error, setError]                 = useState(null);
@@ -135,13 +152,19 @@ export default function Intelligence() {
   const navigate = useNavigate();
 
   // ── Voice state machine ──────────────────────────────────────────────────
-  const [handsFree, setHandsFree]               = useState(false);
+  const [handsFree, setHandsFree]               = useState(true); // Always ON by default for hands-free Nova
   const [voiceState, setVoiceState]             = useState('IDLE');
   const [wakeStatus, setWakeStatus]             = useState('STOPPED'); // ACTIVE | RECONNECTING | STOPPED | MIC_ERROR
   const [voiceError, setVoiceError]             = useState('');
   const [pendingTranscript, setPendingTranscript] = useState('');
+  const [novaResponseText, setNovaResponseText]   = useState('');
+  const [liveAudioLevel, setLiveAudioLevel]       = useState(0);
+  const [liveSpeaker, setLiveSpeaker]             = useState('idle');
+  const [silenceSeconds, setSilenceSeconds]       = useState(30);
   
   const [voiceDiagnostics, setVoiceDiagnostics] = useState(null);
+  const liveClientRef = useRef(null);
+  const silence4sTimerRef = useRef(null);
 
   // ── Action Engine ────────────────────────────────────────────────────────
   const startRecordingRef = useRef(null);
@@ -187,6 +210,23 @@ export default function Intelligence() {
   useEffect(() => { providerRef.current = provider; },           [provider]);
   useEffect(() => { activeActionRef.current = engine.activeAction; }, [engine.activeAction]);
 
+  // ── Final query submission after silence debounce ─────────────────────────
+  const handleFinalQuerySubmit = (text) => {
+    if (!text || !text.trim()) return;
+    if (silence4sTimerRef.current) clearTimeout(silence4sTimerRef.current);
+    wakeRecMgrRef.current?.stop();
+    setNovaResponseText('');
+    setVoiceState('NOVA_LIVE_ACTIVE');
+
+    // If live audio WebSocket is connected, audio was already streamed in real time.
+    // Do NOT send duplicate text query, which causes duplicate turns and 2.8s delay!
+    if (liveClientRef.current && liveClientRef.current.isConnected) {
+      console.log(`[NOVA] Live audio WebSocket active. Turn driven natively by audio stream: "${text}"`);
+    } else {
+      console.log(`[NOVA] Fallback submitting text query: "${text}"`);
+    }
+  };
+
   // ── Wake recognition result handler ─────────────────────────────────────
   // Defined with useCallback so it's stable across renders.
   const handleWakeResult = useCallback((transcript, mode) => {
@@ -197,6 +237,16 @@ export default function Intelligence() {
         console.log(`[MIRRORMIND][VOICE] wake_word_detected transcript="${transcript}"`);
         handleWakeWordDetected();
       }
+    } else if (mode === 'query' && (currentState === 'NOVA_LIVE_ACTIVE' || currentState === 'LISTENING_FOR_QUERY')) {
+      // User is speaking: update live transcript in real-time on screen
+      setPendingTranscript(transcript);
+      liveClientRef.current?.resetSilenceTimer();
+
+      // Reset the silence timer — 2800ms gives comfortable conversational pause time
+      if (silence4sTimerRef.current) clearTimeout(silence4sTimerRef.current);
+      silence4sTimerRef.current = setTimeout(() => {
+        handleFinalQuerySubmit(transcript);
+      }, 2800);
     } else if (mode === 'confirm' && (currentState === 'AWAITING_CONFIRMATION' || currentState === 'ACTION_PREVIEW' || currentState === 'AWAITING_ACTION_CONFIRM')) {
       console.log(`[MIRRORMIND][VOICE] confirmation_received="${transcript}"`);
       handleConfirmation(transcript);
@@ -243,6 +293,12 @@ export default function Intelligence() {
 
   // ── Cleanup helper (uses refs, safe in callbacks) ────────────────────────
   const cleanUpVoiceState = () => {
+    if (silence4sTimerRef.current) clearTimeout(silence4sTimerRef.current);
+    liveClientRef.current?.disconnect();
+    setLiveAudioLevel(0);
+    setLiveSpeaker('idle');
+    setPendingTranscript('');
+    setNovaResponseText('');
     wakeRecMgrRef.current?.stop();
     streamingTTS.stop();
     browserTTS.stop();
@@ -254,37 +310,80 @@ export default function Intelligence() {
     console.log(`[MIRRORMIND][VOICE] cleanup_complete`);
   };
 
-  // ── Wake word detected → greeting ────────────────────────────────────────
+  // ── Wake word detected → Greet user via Native Gemini Voice & Activate Nova Live ──
   const handleWakeWordDetected = async () => {
-    // Stop the wake listener immediately — we do NOT want it running during greeting.
     wakeRecMgrRef.current?.stop();
     setWakeStatus('STOPPED');
 
-    setVoiceState('WAKE_DETECTED');
+    setVoiceState('GREETING');
     setResult(null);
     setQuestion('');
     setPendingTranscript('');
+    setNovaResponseText('');
     setVoiceDiagnostics(null);
 
-    // Small visual pause so "Wake word detected" is visible
-    await new Promise(r => setTimeout(r, 500));
-    if (!handsFreeRef.current) return; // user may have toggled off
-
-    const fullName   = user?.name || 'there';
-    const firstName  = fullName.split(' ')[0];   // "Prajwal Ganiga" → "Prajwal"
-    const greetingText = `Hello ${firstName}. How can I help you?`;
-
-    setVoiceState('GREETING');
-
     try {
-      // Use browser-native TTS for greeting — instant, no Piper round-trip.
-      await browserTTS.speak(greetingText);
-    } catch (err) {
-      console.warn('[MIRRORMIND][GREETING] browser TTS failed, continuing', err);
-    }
+      if (!liveClientRef.current) {
+        liveClientRef.current = new GeminiLiveClient({
+          silenceTimeoutSeconds: 30,
+          onAudioLevel: (level, speaker) => {
+            setLiveAudioLevel(level);
+            if (speaker) setLiveSpeaker(speaker);
+          },
+          onSilenceTick: (secs) => {
+            setSilenceSeconds(secs);
+          },
+          onTextChunk: (text) => {
+            setNovaResponseText((prev) => (prev ? prev + ' ' + text : text));
+          },
+          onToolStart: (toolName, toolArgs) => {
+            setVoiceState('NOVA_TOOL_CALLING');
+            console.log(`[NOVA] Executing tool: ${toolName}`, toolArgs);
+          },
+          onUIAction: (action, data) => {
+            console.log(`[NOVA] UI Action triggered: ${action}`, data);
+            if (action === 'NAVIGATE' && data.path) {
+              navigate(data.path);
+            } else if (action === 'OPEN_DOCUMENT' && data.doc) {
+              engine.openDocumentById?.(data.doc);
+            } else if (action === 'PROJECT_ADDED') {
+              setVoiceState('NOVA_LIVE_ACTIVE');
+              setNovaResponseText((prev) => (prev ? prev + '\n✨ Project added to your portfolio!' : '✨ Project added to your portfolio!'));
+            } else if (action === 'INTERNSHIP_ADDED' || action === 'PROFILE_UPDATED') {
+              setVoiceState('NOVA_LIVE_ACTIVE');
+            }
+          },
+          onStatusChange: (status) => {
+            console.log(`[NOVA] Live status: ${status}`);
+            if (status === 'READY' || status === 'TURN_COMPLETE' || status === 'PLAYBACK_COMPLETE') {
+              // Nova finished turn / greeting: transition to active and listen for next query
+              setVoiceState('NOVA_LIVE_ACTIVE');
+              if (handsFreeRef.current) {
+                wakeRecMgrRef.current?.start('query');
+              }
+            } else if (status === 'SILENCE_TIMEOUT') {
+              console.log('[NOVA] 30s silence timeout. Sleeping live audio.');
+              returnToWakeListening();
+            }
+          },
+          onError: (errMsg) => {
+            console.warn(`[NOVA] Error: ${errMsg}`);
+            setVoiceError(errMsg);
+            returnToWakeListening();
+          },
+        });
+      }
 
-    if (handsFreeRef.current) {
-      startRecording(true);
+      // Connect with autoGreet = true: Gemini Live speaks greeting in ITS OWN REALISTIC VOICE!
+      const token = localStorage.getItem('token') || '';
+      await liveClientRef.current.connect(token, { autoGreet: true });
+
+      if (liveClientRef.current.micStream) {
+        audioMeter.connect(liveClientRef.current.micStream);
+      }
+    } catch (err) {
+      console.error('[NOVA] Failed to connect live client:', err);
+      returnToWakeListening();
     }
   };
 
@@ -512,6 +611,13 @@ export default function Intelligence() {
 
   // ── Return to wake-word listening ─────────────────────────────────────────
   const returnToWakeListening = () => {
+    if (silence4sTimerRef.current) clearTimeout(silence4sTimerRef.current);
+    liveClientRef.current?.disconnect();
+    setLiveAudioLevel(0);
+    setLiveSpeaker('idle');
+    setPendingTranscript('');
+    setNovaResponseText('');
+    audioMeter.disconnect();
     if (!handsFreeRef.current) return;
     setVoiceState('WAKE_LISTENING');
     setVoiceError('');
@@ -753,6 +859,24 @@ export default function Intelligence() {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button
               type="button"
+              onClick={() => setProvider('gemini')}
+              disabled={loading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
+                fontWeight: 700, fontSize: 14, transition: 'all 0.2s',
+                border: provider === 'gemini' ? '2px solid #2563eb' : '2px solid var(--border-color)',
+                background: provider === 'gemini' ? 'rgba(37,99,235,0.1)' : 'var(--bg-secondary)',
+                color: provider === 'gemini' ? '#2563eb' : 'var(--text-secondary)',
+                boxShadow: provider === 'gemini' ? '0 0 0 3px rgba(37,99,235,0.15)' : 'none',
+              }}
+            >
+              ✨ Gemini 3.1 Flash Lite
+              {provider === 'gemini' && <span style={{ fontSize: 10, background: '#2563eb', color: '#fff', borderRadius: 10, padding: '1px 7px' }}>Selected</span>}
+            </button>
+
+            <button
+              type="button"
               onClick={() => setProvider('openrouter')}
               disabled={loading}
               style={{
@@ -790,37 +914,34 @@ export default function Intelligence() {
             </button>
           </div>
           <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>
-            {provider === 'openrouter'
+            {provider === 'gemini'
+              ? '✨ Google Gemini 3.1 Flash Lite — Fast, accurate reasoning across RAG & DB data.'
+              : provider === 'openrouter'
               ? '☁ Cloud AI — Fast, reliable, no local setup required.'
               : '💻 Local AI — qwen3:8b running on this machine. May be slower.'}
           </div>
+
         </div>
 
         <div>
           <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 10, textAlign: 'right' }}>
-            Hands-Free Mode
+            Nova Voice Agent
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (!handsFree) streamingTTS.initAudio();
-              setHandsFree(!handsFree);
-            }}
-            disabled={loading}
+          <div
             style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 20px', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
-              fontWeight: 700, fontSize: 14, transition: 'all 0.2s',
-              border: handsFree ? '2px solid #52c41a' : '2px solid var(--border-color)',
-              background: handsFree ? 'rgba(82,196,26,0.08)' : 'var(--bg-secondary)',
-              color: handsFree ? '#52c41a' : 'var(--text-secondary)',
-              boxShadow: handsFree ? '0 0 0 3px rgba(82,196,26,0.12)' : 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 10,
+              padding: '10px 18px', borderRadius: 8,
+              fontWeight: 700, fontSize: 13,
+              border: '2px solid #2563eb',
+              background: 'rgba(37,99,235,0.08)',
+              color: '#2563eb',
+              boxShadow: '0 0 0 3px rgba(37,99,235,0.12)',
               marginLeft: 'auto',
             }}
           >
-            {handsFree ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-            {handsFree ? 'ON' : 'OFF'}
-          </button>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb', display: 'inline-block', boxShadow: '0 0 8px #2563eb' }}></span>
+            🎙️ Nova Live · Always Active
+          </div>
         </div>
       </div>
 
@@ -830,9 +951,14 @@ export default function Intelligence() {
           voiceState={voiceState}
           wakeStatus={wakeStatus}
           pendingTranscript={pendingTranscript}
+          novaResponseText={novaResponseText}
           provider={provider}
           voiceError={voiceError}
           diagnostics={voiceDiagnostics}
+          liveAudioLevel={liveAudioLevel}
+          liveSpeaker={liveSpeaker}
+          silenceSeconds={silenceSeconds}
+          onEndLiveSession={returnToWakeListening}
         />
       )}
 
@@ -967,12 +1093,13 @@ export default function Intelligence() {
             ))}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Using <strong>{provider === 'ollama' ? 'Local Ollama · qwen3:8b' : 'OpenRouter'}</strong>
+            Using <strong>{provider === 'gemini' ? 'Google Gemini 3.1 Flash Lite' : provider === 'ollama' ? 'Local Ollama · qwen3:8b' : 'OpenRouter'}</strong>
             {' '}· {elapsedTime}s elapsed
             {provider === 'ollama' && elapsedTime > 10 && (
               <span style={{ marginLeft: 8, color: '#fa8c16' }}>⚠ Local model may take 30–120s</span>
             )}
           </div>
+
         </div>
       )}
 

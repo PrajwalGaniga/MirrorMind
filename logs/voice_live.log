@@ -1,0 +1,448 @@
+# MirrorMind Voice & WebSocket Latency Logs
+# Initialized: 2026-09-29
+[2026-09-29 22:19:21.361] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:19:21.425] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-29 22:19:22.269] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:19:23.155] [CONNECTED] [+885.6ms] Active live session with gemini-2.5-flash-native-audio-latest established in 885.6ms
+[2026-09-29 22:19:23.281] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-29 22:19:23.283] [GREETING_SENT] Greeting request dispatched to Gemini in 1.5ms
+[2026-09-29 22:19:24.576] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:19:26.631] [TURN_COMPLETE] Model turn finished. Streamed 103680 audio bytes.
+[2026-09-29 22:19:26.632] [WS_CLEANUP] [+5277.3ms] Cleaning up live voice session (duration=5277.3ms)
+[2026-09-29 22:22:17.251] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:22:17.310] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-29 22:22:18.092] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:22:18.727] [CONNECTED] [+635.8ms] Active live session with gemini-2.5-flash-native-audio-latest established in 635.8ms
+[2026-09-29 22:22:18.826] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-29 22:22:18.827] [GREETING_SENT] Greeting request dispatched to Gemini in 1.0ms
+[2026-09-29 22:22:20.126] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:22:22.178] [TURN_COMPLETE] Model turn finished. Streamed 103680 audio bytes.
+[2026-09-29 22:22:22.178] [WS_CLEANUP] [+4927.8ms] Cleaning up live voice session (duration=4927.8ms)
+[2026-09-29 22:33:02.131] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:33:02.283] [USER_RESOLVE] Resolved user_id=c3e9ee76-b647-48d2-89e9-c8a15c00d8ef, name=Ishwarya
+[2026-09-29 22:33:02.852] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:33:03.790] [CONNECTED] [+937.5ms] Active live session with gemini-2.5-flash-native-audio-latest established in 937.5ms
+[2026-09-29 22:33:03.794] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Ishwarya'
+[2026-09-29 22:33:03.794] [GREETING_SENT] Greeting request dispatched to Gemini in 0.0ms
+[2026-09-29 22:33:05.671] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:33:07.615] [TURN_COMPLETE] Model turn finished. Streamed 97920 audio bytes.
+[2026-09-29 22:33:08.122] [TEXT_IN] User query: 'I wanted to add a new project called SuperBot with Python and FastAPI'
+[2026-09-29 22:33:08.122] [SENT_TO_MODEL] Query forwarded to Gemini in 0.0ms
+[2026-09-29 22:33:09.539] [TOOL_CALL] Model requested tool: add_project with args: {'title': 'SuperBot', 'tech_stack': ['Python', 'FastAPI']}
+[2026-09-29 22:33:09.539] [TOOL_START] Executing tool: add_project | {'title': 'SuperBot', 'tech_stack': ['Python', 'FastAPI']}
+[2026-09-29 22:33:09.622] [TOOL_DONE] [+83.3ms] Project 'SuperBot' added to MongoDB in 83.3ms
+[2026-09-29 22:33:09.622] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:33:11.359] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:33:13.323] [TURN_COMPLETE] Model turn finished. Streamed 96000 audio bytes.
+[2026-09-29 22:33:13.830] [TEXT_IN] User query: 'can you search my portfolio or else my resume and check for my projects'
+[2026-09-29 22:33:13.830] [SENT_TO_MODEL] Query forwarded to Gemini in 0.0ms
+[2026-09-29 22:33:15.184] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'projects'}
+[2026-09-29 22:33:15.184] [TOOL_START] Executing tool: query_rag_database | {'query': 'projects'}
+[2026-09-29 22:33:19.037] [TOOL_RAG] [+3853.9ms] Direct RAG context retrieved in 3853.9ms for query='projects'
+[2026-09-29 22:33:19.037] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:33:20.496] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:33:26.412] [TURN_COMPLETE] Model turn finished. Streamed 286080 audio bytes.
+[2026-09-29 22:33:26.412] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-29 22:33:26.412] [WS_CLEANUP] [+24280.9ms] Cleaning up live voice session (duration=24280.9ms)
+[2026-09-29 22:33:26.412] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-29 22:35:12.349] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:35:12.426] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-29 22:35:13.109] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:35:13.846] [CONNECTED] [+737.0ms] Active live session with gemini-2.5-flash-native-audio-latest established in 737.0ms
+[2026-09-29 22:35:13.951] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-29 22:35:13.952] [GREETING_SENT] Greeting request dispatched to Gemini in 1.1ms
+[2026-09-29 22:35:15.194] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:35:17.010] [TEXT_IN] User query: 'water'
+[2026-09-29 22:35:17.012] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 22:35:17.164] [TURN_COMPLETE] Model turn finished. Streamed 99840 audio bytes.
+[2026-09-29 22:35:19.582] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:35:21.709] [TURN_COMPLETE] Model turn finished. Streamed 178560 audio bytes.
+[2026-09-29 22:35:22.254] [TEXT_IN] User query: 'can you search for my  resume'
+[2026-09-29 22:35:22.254] [SENT_TO_MODEL] Query forwarded to Gemini in 0.5ms
+[2026-09-29 22:35:24.879] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'resume'}
+[2026-09-29 22:35:24.880] [TOOL_START] Executing tool: query_rag_database | {'query': 'resume'}
+[2026-09-29 22:35:29.100] [TOOL_RAG] [+4219.7ms] Direct RAG context retrieved in 4219.7ms for query='resume'
+[2026-09-29 22:35:29.101] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-29 22:35:29.101] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-29 22:35:32.397] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'research paper in resume'}
+[2026-09-29 22:35:32.397] [TOOL_START] Executing tool: query_rag_database | {'query': 'research paper in resume'}
+[2026-09-29 22:35:32.922] [TOOL_RAG] [+524.8ms] Direct RAG context retrieved in 524.8ms for query='research paper in resume'
+[2026-09-29 22:35:32.923] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:35:34.312] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:35:46.046] [TURN_COMPLETE] Model turn finished. Streamed 564480 audio bytes.
+[2026-09-29 22:35:52.643] [TEXT_IN] User query: 'okay I wanted to add a new project'
+[2026-09-29 22:35:52.644] [SENT_TO_MODEL] Query forwarded to Gemini in 0.9ms
+[2026-09-29 22:35:54.109] [TOOL_CALL] Model requested tool: add_project with args: {'tech_stack': [], 'title': 'New Project'}
+[2026-09-29 22:35:54.110] [TOOL_START] Executing tool: add_project | {'tech_stack': [], 'title': 'New Project'}
+[2026-09-29 22:35:54.184] [TOOL_DONE] [+74.4ms] Project 'New Project' added to MongoDB in 74.4ms
+[2026-09-29 22:35:54.185] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:35:55.584] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:35:58.357] [TURN_COMPLETE] Model turn finished. Streamed 155520 audio bytes.
+[2026-09-29 22:36:03.283] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:36:10.018] [TURN_COMPLETE] Model turn finished. Streamed 324480 audio bytes.
+[2026-09-29 22:36:22.385] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:36:24.168] [TURN_COMPLETE] Model turn finished. Streamed 86400 audio bytes.
+[2026-09-29 22:36:24.878] [TEXT_IN] User query: 'I have built an AI interview model which I have developed with the help of gym in API key and Python base API cause as well as I also used Gemini  for'
+[2026-09-29 22:36:24.879] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 22:36:25.524] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-29 22:36:37.381] [TEXT_IN] User query: 'talks and also I have work on the fields of talking to each other with the algorithms all BKT'
+[2026-09-29 22:36:37.383] [SENT_TO_MODEL] Query forwarded to Gemini in 2.3ms
+[2026-09-29 22:36:56.666] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:37:10.123] [TURN_COMPLETE] Model turn finished. Streamed 647040 audio bytes.
+[2026-09-29 22:37:17.946] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-29 22:37:21.444] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-29 22:37:21.445] [WS_CLEANUP] [+129097.0ms] Cleaning up live voice session (duration=129097.0ms)
+[2026-09-29 22:37:21.445] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-29 22:45:36.402] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:45:36.519] [USER_RESOLVE] Resolved user_id=c3e9ee76-b647-48d2-89e9-c8a15c00d8ef, name=Ishwarya
+[2026-09-29 22:45:37.158] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:45:38.075] [CONNECTED] [+916.8ms] Active live session with gemini-2.5-flash-native-audio-latest established in 916.8ms
+[2026-09-29 22:45:38.077] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Ishwarya'
+[2026-09-29 22:45:38.077] [GREETING_SENT] Greeting request dispatched to Gemini in 0.0ms
+[2026-09-29 22:45:39.229] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:45:41.180] [TURN_COMPLETE] Model turn finished. Streamed 99840 audio bytes.
+[2026-09-29 22:45:41.188] [TEXT_IN] User query: 'Nova, add a new project called AI Interview Platform with Python and Gemini API'
+[2026-09-29 22:45:41.188] [SENT_TO_MODEL] Query forwarded to Gemini in 0.0ms
+[2026-09-29 22:45:42.501] [TOOL_CALL] Model requested tool: add_project with args: {'tech_stack': ['Python', 'Gemini API'], 'title': 'AI Interview Platform'}
+[2026-09-29 22:45:42.501] [TOOL_START] Executing tool: add_project | {'tech_stack': ['Python', 'Gemini API'], 'title': 'AI Interview Platform'}
+[2026-09-29 22:45:42.595] [TOOL_DONE] [+93.9ms] Project 'AI Interview Platform' added to MongoDB in 93.9ms
+[2026-09-29 22:45:42.595] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:45:44.571] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:45:50.035] [TURN_COMPLETE] Model turn finished. Streamed 263040 audio bytes.
+[2026-09-29 22:45:50.035] [TEXT_IN] User query: 'can you tell me which project did I add just now and what technologies did I use?'
+[2026-09-29 22:45:50.035] [SENT_TO_MODEL] Query forwarded to Gemini in 0.0ms
+[2026-09-29 22:45:51.351] [TOOL_CALL] Model requested tool: get_session_memory with args: {}
+[2026-09-29 22:45:51.351] [TOOL_START] Executing tool: get_session_memory
+[2026-09-29 22:45:51.351] [TOOL_DONE] [+0.0ms] Session memory fetched in 0.0ms
+[2026-09-29 22:45:51.351] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:45:52.836] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:45:57.481] [TURN_COMPLETE] Model turn finished. Streamed 224640 audio bytes.
+[2026-09-29 22:45:57.481] [TEXT_IN] User query: 'For the AI Interview Platform, I also used Docker and Redis in the tech stack'
+[2026-09-29 22:45:57.481] [SENT_TO_MODEL] Query forwarded to Gemini in 0.0ms
+[2026-09-29 22:45:59.180] [TOOL_CALL] Model requested tool: update_project with args: {'tech_stack': ['Python', 'Gemini API', 'Docker', 'Redis']}
+[2026-09-29 22:45:59.180] [TOOL_START] Executing tool: update_project | {'tech_stack': ['Python', 'Gemini API', 'Docker', 'Redis']}
+[2026-09-29 22:45:59.317] [TOOL_DONE] [+136.7ms] Project 'AI Interview Platform' updated in MongoDB in 136.7ms
+[2026-09-29 22:45:59.317] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:46:01.252] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:46:06.196] [TURN_COMPLETE] Model turn finished. Streamed 238080 audio bytes.
+[2026-09-29 22:46:06.196] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-29 22:46:06.196] [WS_CLEANUP] [+29793.5ms] Cleaning up live voice session (duration=29793.5ms)
+[2026-09-29 22:46:06.196] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-29 22:49:21.525] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:49:21.598] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-29 22:49:22.439] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:49:23.156] [CONNECTED] [+717.3ms] Active live session with gemini-2.5-flash-native-audio-latest established in 717.3ms
+[2026-09-29 22:49:23.263] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-29 22:49:23.263] [GREETING_SENT] Greeting request dispatched to Gemini in 0.0ms
+[2026-09-29 22:49:24.790] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:49:26.561] [TURN_COMPLETE] Model turn finished. Streamed 90240 audio bytes.
+[2026-09-29 22:49:35.231] [TEXT_IN] User query: 'I wanted to add a new project'
+[2026-09-29 22:49:35.232] [SENT_TO_MODEL] Query forwarded to Gemini in 0.5ms
+[2026-09-29 22:49:37.227] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:49:42.107] [TURN_COMPLETE] Model turn finished. Streamed 236160 audio bytes.
+[2026-09-29 22:49:44.383] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:49:47.235] [TURN_COMPLETE] Model turn finished. Streamed 138240 audio bytes.
+[2026-09-29 22:50:17.826] [TEXT_IN] User query: 'agent who talks about an interview and takes an interview of a candidate and then the text if I want to mention I have used a Python and react also I have use some algorithm called as a b k t and HH BKT and some other algorithms and also I have used Gemini API key for talking to the audio and text transcription'
+[2026-09-29 22:50:17.827] [SENT_TO_MODEL] Query forwarded to Gemini in 0.5ms
+[2026-09-29 22:50:33.780] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:50:36.701] [TOOL_CALL] Model requested tool: add_project with args: {'title': 'AI Interview Agent', 'description': 'An AI-based agent that conducts interviews with candidates, utilizing audio and text transcription with the Gemini API.', 'tech_stack': ['Python', 'React', 'BKT', 'HBKT', 'Gemini API']}
+[2026-09-29 22:50:36.703] [TOOL_START] Executing tool: add_project | {'title': 'AI Interview Agent', 'description': 'An AI-based agent that conducts interviews with candidates, utilizing audio and text transcription with the Gemini API.', 'tech_stack': ['Python', 'React', 'BKT', 'HBKT', 'Gemini API']}
+[2026-09-29 22:50:36.769] [TOOL_DONE] [+66.0ms] Project 'AI Interview Agent' added to MongoDB in 66.0ms
+[2026-09-29 22:50:36.770] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 22:50:38.454] [TURN_COMPLETE] Model turn finished. Streamed 405120 audio bytes.
+[2026-09-29 22:50:38.457] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-29 22:50:43.061] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:50:44.556] [TURN_COMPLETE] Model turn finished. Streamed 72960 audio bytes.
+[2026-09-29 22:50:55.930] [TEXT_IN] User query: 'from my resume can you check for the papers that I have presented and got the best paper award'
+[2026-09-29 22:50:55.932] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 22:50:57.513] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'papers presented and best paper award'}
+[2026-09-29 22:50:57.513] [TOOL_START] Executing tool: query_rag_database | {'query': 'papers presented and best paper award'}
+[2026-09-29 22:51:01.996] [TOOL_RAG] [+4483.3ms] Direct RAG context retrieved in 4483.3ms for query='papers presented and best paper award'
+[2026-09-29 22:51:01.997] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-29 22:51:04.121] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-29 22:51:13.747] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:51:25.691] [TURN_COMPLETE] Model turn finished. Streamed 574080 audio bytes.
+[2026-09-29 22:51:37.977] [TEXT_IN] User query: 'okay car from my database can you check what are the skills that I am having in backend'
+[2026-09-29 22:51:37.977] [SENT_TO_MODEL] Query forwarded to Gemini in 0.6ms
+[2026-09-29 22:51:39.311] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'backend skills'}
+[2026-09-29 22:51:39.311] [TOOL_START] Executing tool: query_rag_database | {'query': 'backend skills'}
+[2026-09-29 22:51:39.799] [TOOL_RAG] [+488.0ms] Direct RAG context retrieved in 488.0ms for query='backend skills'
+[2026-09-29 22:51:39.800] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-29 22:51:42.323] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:51:51.742] [TURN_COMPLETE] Model turn finished. Streamed 453120 audio bytes.
+[2026-09-29 22:52:03.613] [TEXT_IN] User query: 'what do you think am I ready for an interview for a back and roll or some other role'
+[2026-09-29 22:52:03.613] [SENT_TO_MODEL] Query forwarded to Gemini in 0.0ms
+[2026-09-29 22:52:13.991] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:52:22.949] [TURN_COMPLETE] Model turn finished. Streamed 430080 audio bytes.
+[2026-09-29 22:52:27.301] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:52:34.270] [TURN_COMPLETE] Model turn finished. Streamed 658560 audio bytes.
+[2026-09-29 22:52:44.151] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:52:46.481] [TEXT_IN] User query: 'can you turn off'
+[2026-09-29 22:52:46.482] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 22:52:51.056] [TURN_COMPLETE] Model turn finished. Streamed 654720 audio bytes.
+[2026-09-29 22:52:51.069] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-29 22:52:51.803] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-29 22:52:51.803] [WS_CLEANUP] [+210278.5ms] Cleaning up live voice session (duration=210278.5ms)
+[2026-09-29 22:52:51.804] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-29 22:56:58.523] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:56:58.651] [USER_RESOLVE] Resolved user_id=c3e9ee76-b647-48d2-89e9-c8a15c00d8ef, name=Ishwarya
+[2026-09-29 22:56:59.370] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:57:00.169] [CONNECTED] [+798.6ms] Active live session with gemini-2.5-flash-native-audio-latest established in 798.6ms
+[2026-09-29 22:57:00.169] [TEXT_IN] User query: 'what do you think am I ready for an interview for a backend role or some other role'
+[2026-09-29 22:57:00.176] [SENT_TO_MODEL] Query forwarded to Gemini in 6.9ms
+[2026-09-29 22:57:05.196] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:57:26.658] [TURN_COMPLETE] Model turn finished. Streamed 1034880 audio bytes.
+[2026-09-29 22:57:26.658] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-29 22:57:26.662] [WS_CLEANUP] [+28138.8ms] Cleaning up live voice session (duration=28138.8ms)
+[2026-09-29 22:57:26.663] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-29 22:58:45.575] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-29 22:58:45.659] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-29 22:58:46.787] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-29 22:58:47.515] [CONNECTED] [+728.7ms] Active live session with gemini-2.5-flash-native-audio-latest established in 728.7ms
+[2026-09-29 22:58:47.630] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-29 22:58:47.630] [GREETING_SENT] Greeting request dispatched to Gemini in 0.0ms
+[2026-09-29 22:58:49.488] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:58:51.459] [TURN_COMPLETE] Model turn finished. Streamed 99840 audio bytes.
+[2026-09-29 22:59:03.926] [TEXT_IN] User query: 'based on my resume do you think I am a good candidate for a back and development a role in an company'
+[2026-09-29 22:59:03.927] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 22:59:05.326] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'backend development skills projects and internships'}
+[2026-09-29 22:59:05.326] [TOOL_START] Executing tool: query_rag_database | {'query': 'backend development skills projects and internships'}
+[2026-09-29 22:59:20.497] [TOOL_RAG] [+15170.9ms] Direct RAG context retrieved in 15170.9ms for query='backend development skills projects and internships'
+[2026-09-29 22:59:20.501] [TOOL_RETURN] Tool responses returned to model in 2.0ms
+[2026-09-29 22:59:21.988] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:59:40.976] [TURN_COMPLETE] Model turn finished. Streamed 912000 audio bytes.
+[2026-09-29 22:59:43.615] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:59:49.422] [TEXT_IN] User query: 'okay fine then'
+[2026-09-29 22:59:49.423] [SENT_TO_MODEL] Query forwarded to Gemini in 1.0ms
+[2026-09-29 22:59:53.944] [TURN_COMPLETE] Model turn finished. Streamed 497280 audio bytes.
+[2026-09-29 22:59:56.502] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 22:59:59.172] [TEXT_IN] User query: 'new internship'
+[2026-09-29 22:59:59.173] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 23:00:02.813] [TURN_COMPLETE] Model turn finished. Streamed 303360 audio bytes.
+[2026-09-29 23:00:04.606] [TOOL_CALL] Model requested tool: add_internship with args: {'role': 'Software Intern', 'description': '', 'company_name': 'Awaiting Company Name', 'domain': 'Awaiting Domain', 'start_date': 'Recent', 'end_date': 'ongoing'}
+[2026-09-29 23:00:04.606] [TOOL_START] Executing tool: add_internship | {'role': 'Software Intern', 'description': '', 'company_name': 'Awaiting Company Name', 'domain': 'Awaiting Domain', 'start_date': 'Recent', 'end_date': 'ongoing'}
+[2026-09-29 23:00:04.610] [TOOL_ERROR] [+1.5ms] add_internship error: 2 validation errors for Internship
+start_date
+  Input should be a valid datetime or date, input is too short [type=datetime_from_date_parsing, input_value='Recent', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/datetime_from_date_parsing
+end_date
+  Input should be a valid datetime or date, input is too short [type=datetime_from_date_parsing, input_value='ongoing', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/datetime_from_date_parsing in 1.5ms
+[2026-09-29 23:00:04.610] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 23:00:05.699] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:00:14.889] [TURN_COMPLETE] Model turn finished. Streamed 441600 audio bytes.
+[2026-09-29 23:00:36.074] [TEXT_IN] User query: 'name is a Dev abscess and I have been working as and engineer over there and also I have work on several projects right now and currently I am working and I have joined on 20 26 January'
+[2026-09-29 23:00:36.075] [SENT_TO_MODEL] Query forwarded to Gemini in 1.0ms
+[2026-09-29 23:00:38.239] [TOOL_CALL] Model requested tool: add_internship with args: {'company_name': 'Dev Abscess', 'role': 'Engineer', 'end_date': 'ongoing', 'start_date': '2026-01-26'}
+[2026-09-29 23:00:38.240] [TOOL_START] Executing tool: add_internship | {'company_name': 'Dev Abscess', 'role': 'Engineer', 'end_date': 'ongoing', 'start_date': '2026-01-26'}
+[2026-09-29 23:00:38.240] [TOOL_ERROR] [+0.6ms] add_internship error: 1 validation error for Internship
+end_date
+  Input should be a valid datetime or date, input is too short [type=datetime_from_date_parsing, input_value='ongoing', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/datetime_from_date_parsing in 0.6ms
+[2026-09-29 23:00:38.241] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-29 23:00:40.560] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:00:53.851] [TURN_COMPLETE] Model turn finished. Streamed 639360 audio bytes.
+[2026-09-29 23:01:02.571] [TEXT_IN] User query: 'I would say I have done a project of AI interview'
+[2026-09-29 23:01:02.571] [SENT_TO_MODEL] Query forwarded to Gemini in 0.5ms
+[2026-09-29 23:01:06.583] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:01:08.267] [TURN_COMPLETE] Model turn finished. Streamed 82560 audio bytes.
+[2026-09-29 23:01:11.093] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:01:14.263] [TURN_COMPLETE] Model turn finished. Streamed 336000 audio bytes.
+[2026-09-29 23:01:18.933] [TOOL_CALL] Model requested tool: add_internship with args: {'role': 'Software Intern', 'company_name': 'New Company', 'domain': 'Software Development', 'end_date': 'ongoing', 'start_date': 'Recent'}
+[2026-09-29 23:01:18.933] [TOOL_START] Executing tool: add_internship | {'role': 'Software Intern', 'company_name': 'New Company', 'domain': 'Software Development', 'end_date': 'ongoing', 'start_date': 'Recent'}
+[2026-09-29 23:01:18.934] [TOOL_ERROR] [+1.5ms] add_internship error: 2 validation errors for Internship
+start_date
+  Input should be a valid datetime or date, input is too short [type=datetime_from_date_parsing, input_value='Recent', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/datetime_from_date_parsing
+end_date
+  Input should be a valid datetime or date, input is too short [type=datetime_from_date_parsing, input_value='ongoing', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.13/v/datetime_from_date_parsing in 1.5ms
+[2026-09-29 23:01:18.936] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-29 23:01:21.066] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:01:26.549] [TURN_COMPLETE] Model turn finished. Streamed 305280 audio bytes.
+[2026-09-29 23:01:32.329] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:01:36.313] [TEXT_IN] User query: 'can you add it to my database or is it already added that particular AI agent project'
+[2026-09-29 23:01:36.314] [SENT_TO_MODEL] Query forwarded to Gemini in 1.0ms
+[2026-09-29 23:01:39.188] [TURN_COMPLETE] Model turn finished. Streamed 330240 audio bytes.
+[2026-09-29 23:01:41.943] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-29 23:01:42.499] [TURN_COMPLETE] Model turn finished. Streamed 92160 audio bytes.
+[2026-09-29 23:01:45.364] [TEXT_IN] User query: 'the  company name is'
+[2026-09-29 23:01:45.365] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-29 23:02:12.892] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-29 23:02:12.892] [WS_CLEANUP] [+207316.8ms] Cleaning up live voice session (duration=207316.8ms)
+[2026-09-29 23:02:12.893] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-30 19:56:33.698] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-30 19:56:33.763] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-30 19:56:35.914] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-30 19:56:37.010] [CONNECTED] [+1096.0ms] Active live session with gemini-2.5-flash-native-audio-latest established in 1096.0ms
+[2026-09-30 19:56:37.143] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-30 19:56:37.145] [GREETING_SENT] Greeting request dispatched to Gemini in 2.0ms
+[2026-09-30 19:56:38.596] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 19:56:40.523] [TURN_COMPLETE] Model turn finished. Streamed 99840 audio bytes.
+[2026-09-30 19:56:49.385] [TEXT_IN] User query: 'can we add a new project'
+[2026-09-30 19:56:49.387] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-30 19:56:53.673] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 19:56:57.483] [TURN_COMPLETE] Model turn finished. Streamed 184320 audio bytes.
+[2026-09-30 19:57:05.927] [TEXT_IN] User query: 'the title of the project is AI interview'
+[2026-09-30 19:57:05.929] [SENT_TO_MODEL] Query forwarded to Gemini in 1.7ms
+[2026-09-30 19:57:07.318] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-30 19:57:14.484] [TOOL_CALL] Model requested tool: add_project with args: {'description': 'An AI-based agent that conducts interviews with candidates.', 'title': 'AI Interviewer'}
+[2026-09-30 19:57:14.486] [TOOL_START] Executing tool: add_project | {'description': 'An AI-based agent that conducts interviews with candidates.', 'title': 'AI Interviewer'}
+[2026-09-30 19:57:14.553] [TOOL_DONE] [+66.8ms] Project 'AI Interviewer' added to MongoDB in 66.8ms
+[2026-09-30 19:57:14.557] [TOOL_RETURN] Tool responses returned to model in 2.7ms
+[2026-09-30 19:57:16.664] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 19:57:22.108] [TURN_COMPLETE] Model turn finished. Streamed 263040 audio bytes.
+[2026-09-30 19:57:43.349] [TOOL_CALL] Model requested tool: update_project with args: {'tech_stack': ['Gemini API', 'FastAPI']}
+[2026-09-30 19:57:43.351] [TOOL_START] Executing tool: update_project | {'tech_stack': ['Gemini API', 'FastAPI']}
+[2026-09-30 19:57:43.499] [TOOL_DONE] [+148.1ms] Project 'AI Interviewer' updated in MongoDB in 148.1ms
+[2026-09-30 19:57:43.501] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-30 19:57:45.462] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 19:57:48.908] [TEXT_IN] User query: 'I used to Gemini API key and also have work on Python first API and I am using dynamo DB from a w s  and also I am using postgras SQL as a database'
+[2026-09-30 19:57:48.911] [SENT_TO_MODEL] Query forwarded to Gemini in 2.5ms
+[2026-09-30 19:57:50.877] [TURN_COMPLETE] Model turn finished. Streamed 410880 audio bytes.
+[2026-09-30 19:57:50.893] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-30 19:57:58.357] [TOOL_CALL] Model requested tool: update_project with args: {'tech_stack': ['Gemini API', 'FastAPI', 'DynamoDB', 'AWS', 'PostgreSQL']}
+[2026-09-30 19:57:58.359] [TOOL_START] Executing tool: update_project | {'tech_stack': ['Gemini API', 'FastAPI', 'DynamoDB', 'AWS', 'PostgreSQL']}
+[2026-09-30 19:57:58.510] [TOOL_DONE] [+150.4ms] Project 'AI Interviewer' updated in MongoDB in 150.4ms
+[2026-09-30 19:57:58.512] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-30 19:57:59.709] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 19:58:06.716] [TURN_COMPLETE] Model turn finished. Streamed 337920 audio bytes.
+[2026-09-30 19:58:07.999] [TEXT_IN] User query: 'no you can skip that  you can skip that'
+[2026-09-30 19:58:08.001] [SENT_TO_MODEL] Query forwarded to Gemini in 1.5ms
+[2026-09-30 19:58:15.902] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 19:58:23.796] [TURN_COMPLETE] Model turn finished. Streamed 380160 audio bytes.
+[2026-09-30 19:58:46.438] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-30 19:58:46.438] [WS_CLEANUP] [+132741.2ms] Cleaning up live voice session (duration=132741.2ms)
+[2026-09-30 19:58:46.438] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-30 20:13:29.135] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-30 20:13:29.218] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-30 20:13:31.501] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-30 20:13:32.172] [CONNECTED] [+671.3ms] Active live session with gemini-2.5-flash-native-audio-latest established in 671.3ms
+[2026-09-30 20:13:32.311] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-30 20:13:32.313] [GREETING_SENT] Greeting request dispatched to Gemini in 2.0ms
+[2026-09-30 20:13:35.194] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 20:13:37.083] [TURN_COMPLETE] Model turn finished. Streamed 96000 audio bytes.
+[2026-09-30 20:13:53.081] [TOOL_CALL] Model requested tool: open_document with args: {'query': 'resume'}
+[2026-09-30 20:13:53.083] [TOOL_START] Executing tool: open_document | {'query': 'resume'}
+[2026-09-30 20:13:53.142] [TOOL_DONE] [+59.8ms] Opened document matching 'resume' in 59.8ms
+[2026-09-30 20:13:53.144] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-30 20:13:57.160] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 20:13:59.610] [TURN_COMPLETE] Model turn finished. Streamed 120960 audio bytes.
+[2026-09-30 20:14:49.353] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-30 20:14:49.355] [WS_CLEANUP] [+80219.1ms] Cleaning up live voice session (duration=80219.1ms)
+[2026-09-30 20:14:49.356] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-30 21:10:56.879] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-30 21:10:57.040] [USER_RESOLVE] Resolved user_id=59823401-ee74-46dc-8df9-66ad4ccdf453, name=Alex
+[2026-09-30 21:10:58.267] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-30 21:10:59.230] [CONNECTED] [+962.7ms] Active live session with gemini-2.5-flash-native-audio-latest established in 962.7ms
+[2026-09-30 21:10:59.403] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Alex'
+[2026-09-30 21:10:59.404] [GREETING_SENT] Greeting request dispatched to Gemini in 1.3ms
+[2026-09-30 21:11:01.263] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:11:01.390] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-09-30 21:11:01.396] [TURN_COMPLETE] Model turn finished. Streamed 78720 audio bytes.
+[2026-09-30 21:11:16.466] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:11:21.695] [TURN_COMPLETE] Model turn finished. Streamed 253440 audio bytes.
+[2026-09-30 21:11:37.120] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-30 21:11:37.200] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-30 21:11:38.287] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-30 21:11:39.097] [CONNECTED] [+810.2ms] Active live session with gemini-2.5-flash-native-audio-latest established in 810.2ms
+[2026-09-30 21:11:39.232] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-30 21:11:39.235] [GREETING_SENT] Greeting request dispatched to Gemini in 2.5ms
+[2026-09-30 21:11:40.941] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-30 21:11:40.943] [WS_CLEANUP] [+3824.2ms] Cleaning up live voice session (duration=3824.2ms)
+[2026-09-30 21:11:40.944] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-30 21:11:41.390] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'published paper from resume'}
+[2026-09-30 21:11:41.395] [TOOL_START] Executing tool: query_rag_database | {'query': 'published paper from resume'}
+[2026-09-30 21:11:45.942] [TOOL_RAG] [+4547.2ms] Direct RAG context retrieved in 4547.2ms for query='published paper from resume'
+[2026-09-30 21:11:45.948] [TOOL_RETURN] Tool responses returned to model in 4.1ms
+[2026-09-30 21:11:46.535] [TEXT_IN] User query: 'Am I ready for an interview?'
+[2026-09-30 21:11:46.537] [SENT_TO_MODEL] Query forwarded to Gemini in 1.9ms
+[2026-09-30 21:11:47.370] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:11:54.745] [TURN_COMPLETE] Model turn finished. Streamed 355200 audio bytes.
+[2026-09-30 21:12:06.506] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:12:18.996] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-09-30 21:12:18.998] [TURN_COMPLETE] Model turn finished. Streamed 777600 audio bytes.
+[2026-09-30 21:12:28.378] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:12:39.323] [TURN_COMPLETE] Model turn finished. Streamed 526080 audio bytes.
+[2026-09-30 21:13:26.067] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-09-30 21:13:26.068] [WS_CLEANUP] [+149196.0ms] Cleaning up live voice session (duration=149196.0ms)
+[2026-09-30 21:13:26.069] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-09-30 21:14:01.398] [WS_CONNECT] Client connected to live voice bridge.
+[2026-09-30 21:14:01.469] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-09-30 21:14:02.353] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-09-30 21:14:04.457] [CONNECTED] [+2104.6ms] Active live session with gemini-2.5-flash-native-audio-latest established in 2104.6ms
+[2026-09-30 21:14:05.301] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-09-30 21:14:05.302] [GREETING_SENT] Greeting request dispatched to Gemini in 1.5ms
+[2026-09-30 21:14:07.891] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:14:08.791] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-09-30 21:14:08.794] [TURN_COMPLETE] Model turn finished. Streamed 96000 audio bytes.
+[2026-09-30 21:14:15.634] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-09-30 21:14:15.637] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-09-30 21:14:30.677] [TOOL_CALL] Model requested tool: open_document with args: {'query': 'resume'}
+[2026-09-30 21:14:30.678] [TOOL_START] Executing tool: open_document | {'query': 'resume'}
+[2026-09-30 21:14:30.727] [TOOL_DONE] [+49.4ms] Opened document matching 'resume' in 49.4ms
+[2026-09-30 21:14:30.729] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-09-30 21:14:30.871] [TOOL_CALL] Model requested tool: query_rag_database with args: {'query': 'paper publication'}
+[2026-09-30 21:14:30.873] [TOOL_START] Executing tool: query_rag_database | {'query': 'paper publication'}
+[2026-09-30 21:14:31.653] [TOOL_RAG] [+780.3ms] Direct RAG context retrieved in 780.3ms for query='paper publication'
+[2026-09-30 21:14:31.654] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-09-30 21:14:33.580] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:14:46.613] [TURN_COMPLETE] Model turn finished. Streamed 627840 audio bytes.
+[2026-09-30 21:15:11.850] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-09-30 21:15:18.525] [OUTPUT_ERROR] Exception in gemini_to_client: 1007 None. The audio content type (CONTENT_TYPE_AUDIO) is not supported for this model configuration.
+[2026-09-30 21:15:18.528] [INPUT_ERROR] Exception in client_to_gemini: received 1007 (invalid frame payload data) The audio content type (CONTENT_TYPE_AUDIO) is not supported for this model configuration.; then sent 1007 (invalid frame payload data) The audio content type (CONTENT_TYPE_AUDIO) is not supported for this model configuration.
+[2026-09-30 21:15:18.528] [WS_CLEANUP] [+77131.2ms] Cleaning up live voice session (duration=77131.2ms)
+[2026-10-13 19:01:11.543] [WS_CONNECT] Client connected to live voice bridge.
+[2026-10-13 19:01:11.612] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-10-13 19:01:12.398] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-10-13 19:01:12.408] [WS_CONNECT] Client connected to live voice bridge.
+[2026-10-13 19:01:12.478] [USER_RESOLVE] Resolved user_id=1bbb893e-6198-4175-b974-bd75ddf9d3d9, name=Prajwal
+[2026-10-13 19:01:13.392] [CONNECT] Attempting live connection to gemini-2.5-flash-native-audio-latest...
+[2026-10-13 19:01:14.221] [CONNECTED] [+1823.1ms] Active live session with gemini-2.5-flash-native-audio-latest established in 1823.1ms
+[2026-10-13 19:01:14.339] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-10-13 19:01:14.340] [GREETING_SENT] Greeting request dispatched to Gemini in 0.5ms
+[2026-10-13 19:01:14.361] [CONNECTED] [+969.1ms] Active live session with gemini-2.5-flash-native-audio-latest established in 969.1ms
+[2026-10-13 19:01:14.499] [GREETING_TRIGGER] Requesting native Gemini greeting for 'Prajwal'
+[2026-10-13 19:01:14.500] [GREETING_SENT] Greeting request dispatched to Gemini in 1.0ms
+[2026-10-13 19:01:15.522] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:16.400] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:16.599] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:01:16.600] [TURN_COMPLETE] Model turn finished. Streamed 69120 audio bytes.
+[2026-10-13 19:01:17.114] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:01:17.119] [TURN_COMPLETE] Model turn finished. Streamed 99840 audio bytes.
+[2026-10-13 19:01:23.235] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:01:23.237] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-10-13 19:01:23.605] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:23.692] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:01:23.694] [TURN_COMPLETE] Model turn finished. Streamed 69120 audio bytes.
+[2026-10-13 19:01:30.893] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:31.299] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:33.742] [TOOL_CALL] Model requested tool: add_project with args: {'title': 'New Project'}
+[2026-10-13 19:01:33.743] [TOOL_START] Executing tool: add_project | {'title': 'New Project'}
+[2026-10-13 19:01:33.827] [TOOL_DONE] [+83.7ms] Project 'New Project' added to MongoDB in 83.7ms
+[2026-10-13 19:01:33.829] [TOOL_RETURN] Tool responses returned to model in 1.0ms
+[2026-10-13 19:01:34.618] [TURN_COMPLETE] Model turn finished. Streamed 180480 audio bytes.
+[2026-10-13 19:01:35.787] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:01:35.788] [TURN_COMPLETE] Model turn finished. Streamed 337920 audio bytes.
+[2026-10-13 19:01:43.773] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:44.036] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:01:47.539] [TURN_COMPLETE] Model turn finished. Streamed 182400 audio bytes.
+[2026-10-13 19:01:47.610] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:01:47.612] [TURN_COMPLETE] Model turn finished. Streamed 291840 audio bytes.
+[2026-10-13 19:01:49.533] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-10-13 19:01:49.534] [WS_CLEANUP] [+37126.7ms] Cleaning up live voice session (duration=37126.7ms)
+[2026-10-13 19:01:49.535] [WS_DISCONNECT] gemini_to_client loop terminated.
+[2026-10-13 19:02:02.142] [TOOL_CALL] Model requested tool: add_project with args: {'tech_stack': ['ReactJS'], 'description': 'An AI-based agent that conducts interviews.', 'title': 'AI Interviewer'}
+[2026-10-13 19:02:02.143] [TOOL_START] Executing tool: add_project | {'tech_stack': ['ReactJS'], 'description': 'An AI-based agent that conducts interviews.', 'title': 'AI Interviewer'}
+[2026-10-13 19:02:02.205] [TOOL_DONE] [+61.6ms] Project 'AI Interviewer' added to MongoDB in 61.6ms
+[2026-10-13 19:02:02.207] [TOOL_RETURN] Tool responses returned to model in 0.0ms
+[2026-10-13 19:02:03.369] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:02:08.683] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:02:08.684] [TURN_COMPLETE] Model turn finished. Streamed 328320 audio bytes.
+[2026-10-13 19:02:14.413] [INTERRUPTED] User barge-in interrupted Nova speech.
+[2026-10-13 19:02:14.417] [TURN_COMPLETE] Model turn finished. Streamed 0 audio bytes.
+[2026-10-13 19:02:21.463] [AUDIO_TTFB] First audio chunk received (46080 bytes)
+[2026-10-13 19:02:25.202] [TURN_COMPLETE] Model turn finished. Streamed 180480 audio bytes.
+[2026-10-13 19:02:27.211] [WS_DISCONNECT] Client disconnected from input loop.
+[2026-10-13 19:02:27.212] [WS_CLEANUP] [+75668.9ms] Cleaning up live voice session (duration=75668.9ms)
+[2026-10-13 19:02:27.213] [WS_DISCONNECT] gemini_to_client loop terminated.

@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from db import get_db, setup_indexes
 import models.db_models
-from routes import auth, students, predict, developer, uploads, settings, extension, documents, retrieval, intelligence, voice, actions
+from routes import auth, students, predict, developer, uploads, settings, extension, documents, retrieval, intelligence, voice, actions, live_voice, live_interview
 
 app = FastAPI(title="MirrorMind API", version="1.0.0")
 
@@ -40,7 +40,13 @@ app.include_router(documents.router, prefix="/api/documents", tags=["Documents"]
 app.include_router(retrieval.router, prefix="/api/retrieval", tags=["Retrieval"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["Intelligence"])
 app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])
+app.include_router(live_voice.router)
+app.include_router(live_interview.router)
 app.include_router(actions.router, prefix="/api/actions", tags=["Actions"])
+
+@app.websocket("/ws")
+async def ws_root_proxy(websocket: WebSocket):
+    await live_interview.interview_websocket_proxy(websocket)
 
 @app.get("/")
 def root():

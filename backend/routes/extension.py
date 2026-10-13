@@ -103,14 +103,24 @@ The error is: {payload.error_message} (source: {payload.source}).
 Respond with JSON only: {{"hint": "...", "explanation": "...", "corrected_block": "..."}} where corrected_block is the corrected version of ONLY the erroring line/block, grounded in the actual code shown, not a generic example.
 """
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY_RAG_DB") or os.getenv("GEMINI_API_KEY")
     if api_key:
         try:
             client = genai.Client(api_key=api_key)
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-            )
+            model_to_use = os.getenv("GEMINI_RAG_MODEL", "gemini-3.1-flash-lite")
+            response = None
+            for candidate in [model_to_use, "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]:
+                try:
+                    response = client.models.generate_content(
+                        model=candidate,
+                        contents=prompt,
+                    )
+                    if response and response.text:
+                        break
+                except Exception:
+                    continue
+            if not response or not response.text:
+                raise RuntimeError("All Gemini model candidates failed for code healing.")
             text = response.text.strip()
             if text.startswith("```json"):
                 text = text[7:]

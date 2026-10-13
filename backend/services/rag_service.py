@@ -117,8 +117,14 @@ USER QUESTION:
     ]
 
     # 5. Call LLM — provider explicitly passed, no silent fallback
-    effective_provider = provider or os.getenv("LLM_PROVIDER", "openrouter").lower()
-    model_name = os.getenv("OLLAMA_MODEL", "qwen3:8b") if effective_provider == "ollama" else os.getenv("OPENROUTER_MODEL", "unknown")
+    effective_provider = provider or os.getenv("LLM_PROVIDER", "gemini").lower()
+    if effective_provider == "gemini":
+        model_name = os.getenv("GEMINI_RAG_MODEL", "gemini-3.1-flash-lite")
+    elif effective_provider == "ollama":
+        model_name = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+    else:
+        model_name = os.getenv("OPENROUTER_MODEL", "unknown")
+
 
     print(
         f"[MIRRORMIND][LLM]\n"

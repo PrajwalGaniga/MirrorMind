@@ -24,8 +24,9 @@ router = APIRouter()
 class NormalizeRequest(BaseModel):
     workflow_id: str        # e.g. "ADD_PROJECT", "ADD_INTERNSHIP"
     collected_data: Dict[str, Any]
-    provider: Optional[str] = "openrouter"
+    provider: Optional[str] = "gemini"
     edit_instruction: Optional[str] = None
+
 
 
 NORMALIZE_PROMPTS = {
@@ -101,10 +102,11 @@ async def normalize_action_data(
         f"edit_instruction={request.edit_instruction is not None}\n"
     )
 
-    provider = (request.provider or "openrouter").lower()
-    valid_providers = {"openrouter", "ollama"}
+    provider = (request.provider or "gemini").lower()
+    valid_providers = {"gemini", "openrouter", "ollama"}
     if provider not in valid_providers:
-        provider = "openrouter"
+        provider = "gemini"
+
 
     messages = [
         {"role": "system", "content": system_prompt},

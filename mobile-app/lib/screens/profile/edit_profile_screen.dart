@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/student_provider.dart';
 import '../../models/student_model.dart';
-import '../../models/skill_model.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -28,9 +27,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<String> _skills = [];
   bool _loading = false;
 
-  List<String> _tiers = ['Tier 1', 'Tier 2', 'Tier 3'];
-  List<String> _workStyles = ['Independent', 'Team Player', 'Hybrid', 'Startup'];
-  List<String> _careerLabels = [
+  final List<String> _tiers = const ['Tier 1', 'Tier 2', 'Tier 3'];
+  final List<String> _workStyles = const ['Independent', 'Team Player', 'Hybrid', 'Startup'];
+  final List<String> _careerLabels = const [
     'AIML_ENGINEER', 'PRODUCT_MANAGER', 'DEVOPS_CLOUD', 'DATA_ANALYST', 
     'CYBERSECURITY', 'SWE_FRONTEND', 'EMBEDDED_IOT', 'SWE_BACKEND', 
     'FULLSTACK_DEV', 'DATA_ENGINEER'

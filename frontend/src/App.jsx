@@ -12,7 +12,9 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import Developer from './pages/Developer';
 import Extension from './pages/Extension';
+import LiveInterview from './pages/LiveInterview';
 import MainLayout from './components/MainLayout';
+import { NovaProvider } from './context/NovaContext';
 import './index.css';
 
 function PrivateRoute({ children }) {
@@ -38,6 +40,7 @@ function AppRoutes() {
       {/* Layout Routes */}
       <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/interview" element={<LiveInterview />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/predict" element={<Predict />} />
         <Route path="/internships" element={<Internships />} />
@@ -56,7 +59,9 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <DevConsoleProvider>
-          <AppRoutes />
+          <NovaProvider>
+            <AppRoutes />
+          </NovaProvider>
         </DevConsoleProvider>
       </AuthProvider>
     </BrowserRouter>

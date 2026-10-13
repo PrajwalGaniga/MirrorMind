@@ -1,0 +1,26 @@
+{
+  "session_id": "interview_1791898023617",
+  "user_id": null,
+  "candidate_name": "Candidate",
+  "created_at": "2026-10-13T13:27:18.165655",
+  "duration_seconds": 15,
+  "transcript": [],
+  "evaluation": {
+    "summary": "The voice interview session with Candidate was initiated, but concluded before in-depth technical discussions took place.",
+    "strong_areas": [
+      "Showed initiative by launching the live AI voice interview session",
+      "Successfully established real-time audio connection"
+    ],
+    "areas_for_improvement": [
+      "Complete a full introduction detailing your tech stack and recent projects",
+      "Answer technical follow-up questions to showcase problem-solving ability"
+    ],
+    "key_topics": [
+      "Introduction & Setup"
+    ],
+    "overall_score": 70,
+    "communication_score": 72,
+    "technical_score": 68,
+    "feedback_message": "Great start taking the initiative, Candidate! Whenever you're ready, start another session and introduce your favorite tech stack to explore deep technical questions."
+  }
+}

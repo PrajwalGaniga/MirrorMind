@@ -10,6 +10,9 @@ import '../../core/services/cloudinary_service.dart';
 import '../../models/student_model.dart';
 import '../predict/predict_screen.dart';
 import '../internships/internships_screen.dart';
+import '../intelligence/intelligence_screen.dart';
+import '../documents/documents_screen.dart';
+import '../interview/live_interview_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -33,9 +36,13 @@ class HomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeader(context, auth, student),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       _buildHeroBanner(context, student),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
+                      _buildHandsFreeCard(context),
+                      const SizedBox(height: 12),
+                      _buildLiveInterviewCard(context, student),
+                      const SizedBox(height: 16),
                       _buildStatsRow(context, student),
                       const SizedBox(height: 20),
                       _buildSkillsSection(context, student),
@@ -137,6 +144,135 @@ class HomeScreen extends StatelessWidget {
             Text(label,
                 style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHandsFreeCard(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const IntelligenceScreen()),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.mint,
+          borderRadius: AppTheme.cardRadius,
+          border: AppTheme.cardBorder,
+          boxShadow: AppTheme.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.cardWhite,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.borderBlack, width: 2),
+              ),
+              child: const Icon(Icons.mic_rounded, size: 24, color: AppTheme.borderBlack),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('Hands-Free Voice AI', style: AppTheme.cardTitle(context)),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.lavender,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.borderBlack, width: 1),
+                        ),
+                        child: const Text('VOICE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Say "Hey MirrorMind" to ask anything hands-free', style: AppTheme.caption(context)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppTheme.borderBlack),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLiveInterviewCard(BuildContext context, StudentModel? student) {
+    final topRole = student?.predictions != null && student!.predictions!.isNotEmpty
+        ? student.predictions!.first.label
+        : 'Full Stack Developer';
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LiveInterviewScreen(initialRole: topRole),
+          ),
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.lavender,
+          borderRadius: AppTheme.cardRadius,
+          border: AppTheme.cardBorder,
+          boxShadow: AppTheme.cardShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.cardWhite,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.borderBlack, width: 2),
+              ),
+              child: const Icon(Icons.record_voice_over_rounded, size: 24, color: AppTheme.borderBlack),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('AI Mock Interview', style: AppTheme.cardTitle(context)),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.mint,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.borderBlack, width: 1),
+                        ),
+                        child: const Text('LIVE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text('Real-time technical interview with Alex for $topRole',
+                      style: AppTheme.caption(context),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppTheme.borderBlack),
           ],
         ),
       ),
@@ -245,7 +381,7 @@ class HomeScreen extends StatelessWidget {
               child: _actionCard(
                 context,
                 icon: '✨',
-                label: 'Run AI Predict',
+                label: 'AI Predict',
                 color: AppTheme.lavender,
                 onTap: () => Navigator.push(
                   context,
@@ -257,12 +393,42 @@ class HomeScreen extends StatelessWidget {
             Expanded(
               child: _actionCard(
                 context,
-                icon: '📄',
-                label: 'Add Certificate',
+                icon: '🧠',
+                label: 'RAG Assistant',
                 color: AppTheme.mint,
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const AddInternshipScreen()),
+                  MaterialPageRoute(builder: (_) => const IntelligenceScreen()),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _actionCard(
+                context,
+                icon: '📁',
+                label: 'Knowledge Base',
+                color: AppTheme.peach,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DocumentsScreen()),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _actionCard(
+                context,
+                icon: '💼',
+                label: 'Internships',
+                color: AppTheme.skyBlue,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const InternshipsScreen()),
                 ),
               ),
             ),

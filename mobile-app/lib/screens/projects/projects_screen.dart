@@ -7,7 +7,6 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/student_provider.dart';
 import '../../core/services/cloudinary_service.dart';
 import '../../models/project_model.dart';
-import '../../models/skill_model.dart';
 
 class ProjectsScreen extends StatelessWidget {
   const ProjectsScreen({super.key});

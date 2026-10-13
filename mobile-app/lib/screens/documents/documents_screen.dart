@@ -1,0 +1,415 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/constants/api.dart';
+import '../../providers/document_provider.dart';
+import '../../models/document_model.dart';
+import '../../widgets/neo_card.dart';
+import '../../widgets/status_badge.dart';
+
+class DocumentsScreen extends StatefulWidget {
+  const DocumentsScreen({super.key});
+
+  @override
+  State<DocumentsScreen> createState() => _DocumentsScreenState();
+}
+
+class _DocumentsScreenState extends State<DocumentsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<DocumentProvider>().fetchDocuments();
+    });
+  }
+
+  Future<void> _pickAndUpload() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+
+    if (result == null || result.files.single.path == null) return;
+    if (!mounted) return;
+
+    final file = File(result.files.single.path!);
+    String selectedCategory = 'resume';
+
+    final shouldUpload = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: AppTheme.borderBlack, width: 3),
+          ),
+          backgroundColor: AppTheme.cardWhite,
+          title: Text('Upload Document', style: AppTheme.heading2(context)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Selected: ${result.files.single.name}',
+                style: AppTheme.body(context),
+              ),
+              const SizedBox(height: 16),
+              const Text('Document Category:', style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: selectedCategory,
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.borderBlack, width: 2),
+                  ),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'resume', child: Text('📄 Resume / CV')),
+                  DropdownMenuItem(value: 'transcript', child: Text('📊 Academic Transcript')),
+                  DropdownMenuItem(value: 'certificate', child: Text('🏆 Certificate')),
+                  DropdownMenuItem(value: 'project_report', child: Text('📁 Project Report')),
+                  DropdownMenuItem(value: 'other', child: Text('📑 Other Document')),
+                ],
+                onChanged: (val) {
+                  if (val != null) setDialogState(() => selectedCategory = val);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(color: AppTheme.textCaption)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.mint,
+                minimumSize: const Size(100, 40),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Upload PDF'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (shouldUpload == true && mounted) {
+      final success = await context.read<DocumentProvider>().uploadDocument(file, selectedCategory);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Document uploaded successfully!' : (context.read<DocumentProvider>().error ?? 'Upload failed.')),
+            backgroundColor: success ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final docProv = context.watch<DocumentProvider>();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Knowledge Base'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => docProv.fetchDocuments(),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: docProv.isUploading ? null : _pickAndUpload,
+        backgroundColor: AppTheme.lavender,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.borderBlack, width: 3),
+        ),
+        elevation: 0,
+        icon: docProv.isUploading
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.upload_file_rounded, color: AppTheme.borderBlack),
+        label: Text(
+          docProv.isUploading ? 'Uploading…' : 'Upload PDF',
+          style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.borderBlack),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: () => docProv.fetchDocuments(),
+        child: docProv.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
+                children: [
+                  _buildHeaderBanner(docProv.documents),
+                  const SizedBox(height: 16),
+                  if (docProv.error != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.softRed,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.borderBlack, width: 2),
+                      ),
+                      child: Text(docProv.error!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                  if (docProv.documents.isEmpty)
+                    _buildEmptyState()
+                  else
+                    ...docProv.documents.map((doc) => _buildDocumentCard(doc)),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderBanner(List<DocumentModel> docs) {
+    final processedCount = docs.where((d) => d.isProcessed).length;
+    final embeddedCount = docs.where((d) => d.isEmbedded).length;
+    final totalChunks = docs.fold<int>(0, (sum, d) => sum + (d.chunkCount ?? 0));
+
+    return NeoCard(
+      backgroundColor: AppTheme.peach,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.cardWhite,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.borderBlack, width: 2),
+                ),
+                child: const Icon(Icons.folder_shared_rounded, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Document Knowledge Base', style: AppTheme.cardTitle(context)),
+                    Text(
+                      'Upload your resumes & certificates to power MirrorMind AI RAG search.',
+                      style: AppTheme.caption(context),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _statPill('${docs.length}', 'Documents', AppTheme.cardWhite),
+              _statPill('$totalChunks', 'Text Chunks', AppTheme.mint),
+              _statPill('$embeddedCount / $processedCount', 'Indexed FAISS', AppTheme.lavender),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statPill(String value, String label, Color bg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.borderBlack, width: 2),
+      ),
+      child: Column(
+        children: [
+          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: NeoCard(
+        backgroundColor: AppTheme.cardWhite,
+        child: Column(
+          children: [
+            const Icon(Icons.cloud_upload_outlined, size: 56, color: AppTheme.textCaption),
+            const SizedBox(height: 12),
+            Text('No Documents Uploaded Yet', style: AppTheme.cardTitle(context)),
+            const SizedBox(height: 6),
+            Text(
+              'Upload your resume, degree transcript, or certificates in PDF format to build your AI portfolio knowledge base.',
+              style: AppTheme.caption(context),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _pickAndUpload,
+              icon: const Icon(Icons.add),
+              label: const Text('Upload Your First Document'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentCard(DocumentModel doc) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: NeoCard(
+        backgroundColor: AppTheme.cardWhite,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.skyBlue,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.borderBlack, width: 2),
+                  ),
+                  child: const Icon(Icons.picture_as_pdf_rounded, size: 24, color: AppTheme.borderBlack),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        doc.filename,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Category: ${doc.category.toUpperCase()} • ${doc.formattedSize}${doc.pageCount != null ? ' • ${doc.pageCount} pages' : ''}',
+                        style: AppTheme.caption(context),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppTheme.borderBlack, width: 2),
+                  ),
+                  onSelected: (val) async {
+                    if (val == 'delete') {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: const BorderSide(color: AppTheme.borderBlack, width: 2),
+                          ),
+                          title: const Text('Delete Document?'),
+                          content: Text('Are you sure you want to delete "${doc.filename}" and its vector embeddings?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.softRed),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true && mounted) {
+                        context.read<DocumentProvider>().deleteDocument(doc.id);
+                      }
+                    } else if (val == 'download') {
+                      final url = Uri.parse(ApiConstants.documentDownload(doc.id));
+                      launchUrl(url, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'download', child: Text('📥 Download PDF')),
+                    const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                StatusBadge.processing(doc.processingStatus),
+                StatusBadge.embedding(doc.embeddingStatus),
+                if (doc.chunkCount != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.canvas,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderBlack, width: 1),
+                    ),
+                    child: Text(
+                      '${doc.chunkCount} Chunks',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+            if (!doc.isProcessed || !doc.isEmbedded) ...[
+              const Divider(height: 20, color: Color(0xFFE5E5E5)),
+              Row(
+                children: [
+                  if (!doc.isProcessed)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.mint,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          minimumSize: const Size(0, 38),
+                        ),
+                        onPressed: doc.isProcessing
+                            ? null
+                            : () => context.read<DocumentProvider>().processDocument(doc.id),
+                        icon: const Icon(Icons.auto_fix_high_rounded, size: 16),
+                        label: Text(doc.isProcessing ? 'Processing…' : 'Extract Text'),
+                      ),
+                    )
+                  else if (!doc.isEmbedded)
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.lavender,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          minimumSize: const Size(0, 38),
+                        ),
+                        onPressed: doc.isEmbedding
+                            ? null
+                            : () => context.read<DocumentProvider>().embedDocument(doc.id),
+                        icon: const Icon(Icons.bolt, size: 16),
+                        label: Text(doc.isEmbedding ? 'Embedding…' : 'Index into FAISS'),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

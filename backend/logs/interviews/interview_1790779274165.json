@@ -1,0 +1,14 @@
+{
+  "session_id": "interview_1790779274165",
+  "user_id": null,
+  "candidate_name": "Candidate",
+  "created_at": "2026-09-30T14:41:57.051231",
+  "transcript": [
+    {
+      "role": "assistant",
+      "text": "Hello, it's great to connect with you today. Can you explain the core principles of microservices architecture and how they fundamentally differ from a monolithic approach?",
+      "is_final": true,
+      "timestamp": "2026-09-30T14:41:33.308585"
+    }
+  ]
+}

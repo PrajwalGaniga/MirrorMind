@@ -1,0 +1,14 @@
+{
+  "session_id": "interview_1790779175301",
+  "user_id": null,
+  "candidate_name": "Candidate",
+  "created_at": "2026-09-30T14:40:14.347810",
+  "transcript": [
+    {
+      "role": "assistant",
+      "text": "Hello, it's nice to meet you. When designing a large-scale system, how do you typically balance competing requirements like scalability, performance, and consistency?",
+      "is_final": true,
+      "timestamp": "2026-09-30T14:40:11.686975"
+    }
+  ]
+}

@@ -8,26 +8,39 @@ from services.rag_service import generate_rag_response
 
 router = APIRouter()
 
-VALID_PROVIDERS = {"openrouter", "ollama"}
+VALID_PROVIDERS = {"gemini", "openrouter", "ollama"}
+
+GEMINI_ERROR_MESSAGES = {
+    "GEMINI_QUOTA_ERROR": {
+        "error": "Gemini API quota exceeded.",
+        "detail": "The Gemini API request limit has been reached.",
+        "suggestion": "Please wait a moment or check your Gemini API plan."
+    },
+    "GEMINI_TIMEOUT": {
+        "error": "Gemini did not respond in time.",
+        "detail": "The Gemini AI service timed out.",
+        "suggestion": "Try asking your question again."
+    }
+}
 
 # Error codes raised by llm_service mapped to user-facing messages
 OLLAMA_ERROR_MESSAGES = {
     "OLLAMA_TIMEOUT": {
         "error": "Local Ollama did not respond within the allowed time.",
         "detail": "Your RAG context was successfully prepared, but the local model did not respond in time.",
-        "suggestion": "Try OpenRouter for a faster response."
+        "suggestion": "Try Gemini for a faster response."
     },
     "OLLAMA_CONNECT_ERROR": {
         "error": "Cannot connect to Local Ollama.",
         "detail": "Ollama does not appear to be running on this machine.",
-        "suggestion": "Start Ollama locally, or switch to OpenRouter."
+        "suggestion": "Start Ollama locally, or switch to Gemini."
     },
 }
 OPENROUTER_ERROR_MESSAGES = {
     "OPENROUTER_TIMEOUT": {
         "error": "OpenRouter did not respond in time.",
         "detail": "The cloud AI service timed out.",
-        "suggestion": "Try again, or use Local Ollama if it is running."
+        "suggestion": "Try again, or use Gemini."
     },
 }
 
@@ -35,7 +48,7 @@ OPENROUTER_ERROR_MESSAGES = {
 class AskRequest(BaseModel):
     question: str
     top_k: int = Field(default=5, ge=1, le=10)
-    provider: Optional[str] = "openrouter"  # Frontend always sends this explicitly
+    provider: Optional[str] = "gemini"  # Default is Gemini 3.1 Flash Lite
 
 
 @router.post("/ask")
@@ -45,7 +58,8 @@ async def ask_intelligence(
     db = Depends(get_db)
 ):
     # Validate provider
-    provider = (request.provider or "openrouter").lower().strip()
+    provider = (request.provider or "gemini").lower().strip()
+
     if provider not in VALID_PROVIDERS:
         raise HTTPException(
             status_code=400,

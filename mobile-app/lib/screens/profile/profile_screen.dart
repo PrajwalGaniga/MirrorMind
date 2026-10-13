@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/student_provider.dart';
 import '../../core/services/cloudinary_service.dart';
 import 'edit_profile_screen.dart';
+import '../settings/settings_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -81,13 +82,31 @@ class ProfileScreen extends StatelessWidget {
                 _skillsCard(context, student.skills, student.certifications),
               ],
               const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-                ),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Edit Profile'),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                      ),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit Profile'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.peach,
+                      minimumSize: const Size(52, 48),
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                    ),
+                    child: const Icon(Icons.settings_outlined, color: AppTheme.borderBlack),
+                  ),
+                ],
               ),
               const SizedBox(height: 80),
             ],

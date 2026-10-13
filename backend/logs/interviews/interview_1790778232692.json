@@ -1,0 +1,56 @@
+{
+  "session_id": "interview_1790778232692",
+  "user_id": "1bbb893e-6198-4175-b974-bd75ddf9d3d9",
+  "candidate_name": "Prajwal Ganiga",
+  "created_at": "2026-09-30T14:24:17.799737",
+  "transcript": [
+    {
+      "role": "candidate",
+      "text": " \u0939\u0947\u0932\u094b",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:06.496186"
+    },
+    {
+      "role": "assistant",
+      "text": "Hello. I'm",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:08.012865"
+    },
+    {
+      "role": "assistant",
+      "text": " ready",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:08.298395"
+    },
+    {
+      "role": "assistant",
+      "text": " to start",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:08.441321"
+    },
+    {
+      "role": "assistant",
+      "text": " the interview.",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:08.452279"
+    },
+    {
+      "role": "assistant",
+      "text": " How are",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:08.596206"
+    },
+    {
+      "role": "assistant",
+      "text": " you today?",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:08.679833"
+    },
+    {
+      "role": "candidate",
+      "text": " Hello.",
+      "is_final": false,
+      "timestamp": "2026-09-30T14:24:17.687148"
+    }
+  ]
+}
