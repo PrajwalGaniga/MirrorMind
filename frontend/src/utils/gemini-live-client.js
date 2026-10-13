@@ -11,6 +11,7 @@
  */
 
 import { voiceLog } from './logger';
+import { AudioWorkletCapture } from './audio-worklet-capture';
 
 export class GeminiLiveClient {
   constructor({
@@ -23,6 +24,7 @@ export class GeminiLiveClient {
     onSilenceTick = () => {},
     onError = () => {},
     silenceTimeoutSeconds = 30,
+    speakerMode = false,
   } = {}) {
     this.onAudioLevel = onAudioLevel;
     this.onTextChunk = onTextChunk;
@@ -35,10 +37,9 @@ export class GeminiLiveClient {
     this.silenceTimeoutSeconds = silenceTimeoutSeconds;
 
     this.ws = null;
-    this.micStream = null;
-    this.micContext = null;
-    this.micProcessor = null;
+    this.capture = null;
     this.micAnalyser = null;
+    this.speakerMode = speakerMode || (typeof localStorage !== 'undefined' && localStorage.getItem('nova_speaker_mode') === 'true');
 
     this.playContext = null;
     this.playAnalyser = null;
@@ -213,88 +214,54 @@ export class GeminiLiveClient {
   }
 
   /**
-   * Immediately stops active audio playback and notifies server.
+   * Immediately stops active audio playback. Server VAD handles barge-in.
    */
   interrupt() {
     this._flushAudioPlayback('manual');
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        this.ws.send(JSON.stringify({ type: 'INTERRUPT' }));
-      } catch (_) {}
+    // Stop sending {type:'INTERRUPT'}. Server VAD handles barge-in.
+  }
+
+  /**
+   * Captures raw microphone audio via AudioWorkletCapture (16kHz PCM 16-bit, capture-only, no manual VAD).
+   */
+  async _startMicCapture() {
+    try {
+      this.capture = new AudioWorkletCapture({
+        enableVAD: false, // capture only: no manual VAD, no ACTIVITY_START/END
+        onChunk: (pcmArrayBuffer) => this._handleOutgoingMicChunk(pcmArrayBuffer),
+        onLevel: (rms) => {
+          if (rms > 0.015) {
+            this.resetSilenceTimer();
+          }
+        },
+        onError: (err) => {
+          console.error('[NOVA][MIC] Capture error:', err);
+          this.onError('Microphone permission denied or unavailable.');
+        },
+      });
+
+      await this.capture.start();
+      this.micAnalyser = this.capture.analyserNode;
+    } catch (err) {
+      console.error('[NOVA][CLIENT] Microphone capture error:', err);
+      this.onError('Microphone permission denied or unavailable.');
     }
   }
 
   /**
-   * Captures raw microphone audio, downsamples to 16kHz PCM 16-bit, and streams via WS.
+   * Routes outgoing 16kHz PCM16 mic frames to the WebSocket.
+   * When SPEAKER_MODE is enabled, suppresses mic audio while Nova is playing audio.
    */
-  async _startMicCapture() {
-    try {
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+  _handleOutgoingMicChunk(pcmArrayBuffer) {
+    if (!this.isConnected || this.isMuted) return;
 
-      this.micContext = new (window.AudioContext || window.webkitAudioContext)({
-        sampleRate: 16000,
-      });
+    // SPEAKER_MODE: when on, do not send mic audio while assistant is playing audio
+    if (this.speakerMode && this.activeSources.length > 0) {
+      return;
+    }
 
-      const source = this.micContext.createMediaStreamSource(this.micStream);
-
-      // Create AnalyserNode for high-res mic level visualization
-      this.micAnalyser = this.micContext.createAnalyser();
-      this.micAnalyser.fftSize = 256;
-      this.micAnalyser.smoothingTimeConstant = 0.8;
-      source.connect(this.micAnalyser);
-
-      // 2048 buffer size gives ~128ms latency per audio packet
-      this.micProcessor = this.micContext.createScriptProcessor(2048, 1, 1);
-
-      this.micProcessor.onaudioprocess = (e) => {
-        if (!this.isConnected || this.isMuted) return;
-
-        const inputData = e.inputBuffer.getChannelData(0);
-
-        // Compute RMS audio level
-        let sum = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          sum += inputData[i] * inputData[i];
-        }
-        const rms = Math.sqrt(sum / inputData.length);
-
-        // If user is actively speaking, reset the silence timeout
-        if (rms > 0.015) {
-          this.resetSilenceTimer();
-        }
-
-        // Conversational Barge-In: if user speaks while agent is speaking, flush playback
-        if (rms > 0.04 && this.activeSources.length > 0) {
-          voiceLog.push('NOVA', 'LOCAL_RMS_BARGE_IN', { rms: rms.toFixed(4), activeSources: this.activeSources.length });
-          this._flushAudioPlayback('local_rms');
-        }
-
-        // Convert Float32 to 16-bit PCM Little Endian
-        const pcm16 = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        }
-
-        // Send binary PCM frame over WebSocket
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(pcm16.buffer);
-        }
-      };
-
-      source.connect(this.micProcessor);
-      this.micProcessor.connect(this.micContext.destination);
-    } catch (err) {
-      console.error('[NOVA][CLIENT] Microphone capture error:', err);
-      this.onError('Microphone permission denied or unavailable.');
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(pcmArrayBuffer);
     }
   }
 
@@ -307,6 +274,12 @@ export class GeminiLiveClient {
         sampleRate: 24000,
       });
       this.nextPlayTime = this.playContext.currentTime;
+
+      voiceLog.push('NOVA', 'PLAYBACK_CONTEXT', {
+        requestedRate: 24000,
+        actualRate: this.playContext.sampleRate,
+      });
+      console.debug(`[NOVA][PLAYBACK] Playback AudioContext initialized. Requested: 24000Hz, Actual: ${this.playContext.sampleRate}Hz`);
 
       // Create AnalyserNode for audio output visualization
       this.playAnalyser = this.playContext.createAnalyser();
@@ -447,31 +420,13 @@ export class GeminiLiveClient {
     this._stopAudioMonitor();
     this._flushAudioPlayback('disconnect');
 
-    if (this.micProcessor) {
+    if (this.capture) {
       try {
-        this.micProcessor.disconnect();
+        this.capture.stop();
       } catch (_) {}
-      this.micProcessor = null;
+      this.capture = null;
     }
-
-    if (this.micAnalyser) {
-      try {
-        this.micAnalyser.disconnect();
-      } catch (_) {}
-      this.micAnalyser = null;
-    }
-
-    if (this.micStream) {
-      this.micStream.getTracks().forEach((t) => t.stop());
-      this.micStream = null;
-    }
-
-    if (this.micContext) {
-      try {
-        this.micContext.close();
-      } catch (_) {}
-      this.micContext = null;
-    }
+    this.micAnalyser = null;
 
     if (this.playAnalyser) {
       try {
@@ -496,5 +451,17 @@ export class GeminiLiveClient {
 
     this.onStatusChange('DISCONNECTED');
     this.onAudioLevel(0, 'idle');
+  }
+
+  /**
+   * Toggles Speaker Mode (persisted in localStorage).
+   * When on: suppresses mic audio while Nova is speaking to eliminate acoustic feedback.
+   */
+  setSpeakerMode(enabled) {
+    this.speakerMode = Boolean(enabled);
+    try {
+      localStorage.setItem('nova_speaker_mode', this.speakerMode ? 'true' : 'false');
+    } catch (_) {}
+    voiceLog.push('NOVA', 'SPEAKER_MODE', { enabled: this.speakerMode });
   }
 }

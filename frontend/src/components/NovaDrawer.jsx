@@ -48,12 +48,28 @@ export default function NovaDrawer() {
   const [inputVal, setInputVal] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [activeTool, setActiveTool] = useState(null);
+  const [speakerMode, setSpeakerMode] = useState(() => {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('nova_speaker_mode') === 'true';
+  });
 
   const liveClientRef = useRef(null);
   const messagesEndRef = useRef(null);
   const currentMsgRef = useRef('');
   const msgIdRef = useRef(null);
   const toolActivityMap = useRef({});
+
+  const toggleSpeakerMode = () => {
+    setSpeakerMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('nova_speaker_mode', next ? 'true' : 'false');
+      } catch (_) {}
+      if (liveClientRef.current) {
+        liveClientRef.current.setSpeakerMode(next);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -96,6 +112,7 @@ export default function NovaDrawer() {
     const token = localStorage.getItem('token') || '';
 
     const client = new GeminiLiveClient({
+      speakerMode,
       silenceTimeoutSeconds: 45,
       onAudioLevel: (level, speaker) => {
         if (speaker === 'agent' && level > 0.02) {
@@ -254,10 +271,32 @@ export default function NovaDrawer() {
                 <span style={styles.statusDot} /> Online · Real-Time Co-Pilot
               </div>
             </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={toggleSpeakerMode}
+              title="Speaker Mode: When enabled, prevents acoustic echo by muting the mic while Nova speaks through loudspeakers. Turn-taking is strictly sequential (barge-in disabled)."
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '5px 9px',
+                borderRadius: '8px',
+                border: speakerMode ? '1px solid #2563EB' : '1px solid #E2E8F0',
+                backgroundColor: speakerMode ? '#EFF6FF' : '#F8FAFC',
+                color: speakerMode ? '#2563EB' : '#64748B',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Volume2 size={13} color={speakerMode ? '#2563EB' : '#64748B'} />
+              <span>Speaker {speakerMode ? 'ON' : 'OFF'}</span>
+            </button>
+            <button style={styles.closeBtn} onClick={closeNova}>
+              <X size={18} />
+            </button>
           </div>
-          <button style={styles.closeBtn} onClick={closeNova}>
-            <X size={18} />
-          </button>
         </div>
 
         {/* 3D Holographic Assistant Banner */}
