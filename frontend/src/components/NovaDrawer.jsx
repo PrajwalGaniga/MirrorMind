@@ -47,6 +47,9 @@ export default function NovaDrawer() {
   ]);
   const [inputVal, setInputVal] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState('idle'); // 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+  const [reconnectInfo, setReconnectInfo] = useState(null);
+  const [idleWarningSec, setIdleWarningSec] = useState(null);
   const [activeTool, setActiveTool] = useState(null);
   const [speakerMode, setSpeakerMode] = useState(() => {
     return typeof localStorage !== 'undefined' && localStorage.getItem('nova_speaker_mode') === 'true';
@@ -149,19 +152,38 @@ export default function NovaDrawer() {
       onUIAction: (action, data) => {
         handleUIAction(action, data);
       },
-      onStatusChange: (status) => {
-        console.log(`[NOVA][DRAWER] Live status: ${status}`);
-        if (status === 'READY') {
+      onStatusChange: (status, payload) => {
+        console.log(`[NOVA][DRAWER] Live status: ${status}`, payload);
+        if (['idle', 'connecting', 'connected', 'reconnecting', 'failed'].includes(status)) {
+          setConnectionState(status);
+        }
+        if (status === 'connected') {
           setIsConnected(true);
+          setReconnectInfo(null);
+          setIdleWarningSec(null);
+        } else if (status === 'reconnecting') {
+          setIsConnected(false);
+          setReconnectInfo(payload);
+        } else if (status === 'failed') {
+          setIsConnected(false);
+          setAssistantState('idle');
+        } else if (status === 'IDLE_PROMPT') {
+          setIdleWarningSec(payload?.remainingSec || 30);
+        } else if (status === 'IDLE_RESUMED') {
+          setIdleWarningSec(null);
         } else if (status === 'TURN_COMPLETE' || status === 'PLAYBACK_COMPLETE') {
           setAssistantState('idle');
           setActiveTool(null);
           msgIdRef.current = null;
           currentMsgRef.current = '';
-        } else if (status === 'SILENCE_TIMEOUT') {
+        } else if (status === 'IDLE_TIMEOUT' || status === 'SILENCE_TIMEOUT') {
           setIsConnected(false);
           setAssistantState('idle');
+          setIdleWarningSec(null);
         }
+      },
+      onIdleWarning: (sec, isActive) => {
+        setIdleWarningSec(isActive ? sec : null);
       },
       onError: (errMsg) => {
         console.warn(`[NOVA][DRAWER] Live client error: ${errMsg}`);
@@ -271,7 +293,27 @@ export default function NovaDrawer() {
             <div>
               <div style={styles.headerTitle}>Nova Assistant</div>
               <div style={styles.headerSubtitle}>
-                <span style={styles.statusDot} /> Online · Real-Time Co-Pilot
+                <span
+                  style={{
+                    ...styles.statusDot,
+                    backgroundColor:
+                      connectionState === 'connected'
+                        ? '#10B981'
+                        : connectionState === 'connecting'
+                        ? '#F59E0B'
+                        : connectionState === 'reconnecting'
+                        ? '#EF4444'
+                        : connectionState === 'failed'
+                        ? '#EF4444'
+                        : '#94A3B8',
+                  }}
+                />
+                {connectionState === 'connected' && 'Online · Real-Time Co-Pilot'}
+                {connectionState === 'connecting' && 'Connecting...'}
+                {connectionState === 'reconnecting' &&
+                  `Reconnecting${reconnectInfo?.attempt ? ` (${reconnectInfo.attempt}/${reconnectInfo.maxAttempts || 6})` : ''}...`}
+                {connectionState === 'failed' && 'Connection Failed'}
+                {connectionState === 'idle' && 'Standby'}
               </div>
             </div>
           </div>
@@ -302,6 +344,74 @@ export default function NovaDrawer() {
             </button>
           </div>
         </div>
+
+        {/* Failed Connection Notification Banner */}
+        {connectionState === 'failed' && (
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#FEF2F2',
+              borderBottom: '1px solid #FCA5A5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: '12px', color: '#B91C1C', fontWeight: 500 }}>
+              ⚠️ Live voice disconnected after multiple attempts.
+            </span>
+            <button
+              onClick={() => liveClientRef.current?.retry()}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Inactivity Watchdog Prompt Banner ("Still there?") */}
+        {idleWarningSec !== null && (
+          <div
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#FFFBEB',
+              borderBottom: '1px solid #FCD34D',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: '12px', color: '#92400E', fontWeight: 500 }}>
+              ⏱️ Still there? Nova will sleep in {idleWarningSec}s.
+            </span>
+            <button
+              onClick={() => liveClientRef.current?.resetSilenceTimer()}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#D97706',
+                color: '#FFFFFF',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Stay Connected
+            </button>
+          </div>
+        )}
 
         {/* 3D Holographic Assistant Banner */}
         <div style={styles.avatarSection}>

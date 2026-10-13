@@ -277,39 +277,19 @@ def _get_env_end_sensitivity(env_val: str, default: str = "LOW") -> Any:
     return types.EndSensitivity.END_SENSITIVITY_LOW
 
 
-@router.websocket("/live")
-async def live_voice_bridge(websocket: WebSocket):
-    t_ws_connect = time.time()
-    await websocket.accept()
-    voice_logger.log("WS_CONNECT", "Client connected to live voice bridge.")
-
-    user_id, user_name, student_doc = await _resolve_user_info(websocket)
-    voice_logger.log("USER_RESOLVE", f"Resolved user_id={user_id}, name={user_name}")
-
-    api_key = (
-        os.getenv("GEMINI_LIVE_API_KEY")
-        or os.getenv("GEMINI_API_KEY_RAG_DB")
-        or os.getenv("GEMINI_API_KEY")
-    )
-    if not api_key:
-        voice_logger.log("ERROR", "GEMINI_LIVE_API_KEY is not configured.")
-        await websocket.send_json({"type": "ERROR", "message": "Gemini API key not configured on server."})
-        await websocket.close()
-        return
-
-    primary_model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-latest")
-    fallback_model = os.getenv("GEMINI_LIVE_FALLBACK_MODEL", "gemini-2.0-flash-exp")
-
-    client = genai.Client(api_key=api_key, http_options={"api_version": "v1beta"})
-
+def build_nova_config(student_doc: dict, user_name: str, resumption_handle: Optional[str] = None) -> types.LiveConnectConfig:
     system_instruction = build_personalized_instruction(student_doc, user_name)
-
     nova_start_sens = _get_env_sensitivity(os.getenv("NOVA_START_SENSITIVITY", "LOW"))
     nova_end_sens = _get_env_end_sensitivity(os.getenv("NOVA_END_SENSITIVITY", "LOW"))
     nova_silence_ms = int(os.getenv("NOVA_SILENCE_MS", "1000"))
     nova_prefix_padding_ms = int(os.getenv("NOVA_PREFIX_PADDING_MS", "200"))
 
-    config = types.LiveConnectConfig(
+    resumption_config = types.SessionResumptionConfig(
+        handle=resumption_handle,
+        transparent=True if resumption_handle else None
+    )
+
+    return types.LiveConnectConfig(
         response_modalities=[types.Modality.AUDIO],
         tools=NOVA_TOOLS,
         system_instruction=types.Content(parts=[types.Part.from_text(text=system_instruction)]),
@@ -339,45 +319,42 @@ async def live_voice_bridge(websocket: WebSocket):
         output_audio_transcription=types.AudioTranscriptionConfig(
             language_codes=["en-US", "en-IN"]
         ),
+        session_resumption=resumption_config,
     )
 
-    session = None
-    connected_model = None
-    t_model_connect = time.time()
 
-    for model_name in [primary_model, fallback_model]:
-        try:
-            voice_logger.log("CONNECT", f"Attempting live connection to {model_name}...")
-            ctx = client.aio.live.connect(model=model_name, config=config)
-            session = await ctx.__aenter__()
-            connected_model = model_name
-            connect_duration = (time.time() - t_model_connect) * 1000
-            voice_logger.log("CONNECTED", f"Active live session with {model_name} established in {connect_duration:.1f}ms", connect_duration)
-            break
-        except Exception as e:
-            voice_logger.log("WARNING", f"Model {model_name} failed: {e}")
-            session = None
+@router.websocket("/live")
+async def live_voice_bridge(websocket: WebSocket):
+    t_ws_connect = time.time()
+    await websocket.accept()
+    voice_logger.log("WS_CONNECT", "Client connected to live voice bridge.")
 
-    if session is None:
-        voice_logger.log("ERROR", "Failed to connect to any Gemini Live Audio model.")
-        await websocket.send_json({"type": "ERROR", "message": "Failed to connect to Gemini Live Audio service."})
+    user_id, user_name, student_doc = await _resolve_user_info(websocket)
+    voice_logger.log("USER_RESOLVE", f"Resolved user_id={user_id}, name={user_name}")
+
+    api_key = (
+        os.getenv("GEMINI_LIVE_API_KEY")
+        or os.getenv("GEMINI_API_KEY_RAG_DB")
+        or os.getenv("GEMINI_API_KEY")
+    )
+    if not api_key:
+        voice_logger.log("ERROR", "GEMINI_LIVE_API_KEY is not configured.")
+        await websocket.send_json({"type": "ERROR", "message": "Gemini API key not configured on server."})
         await websocket.close()
         return
 
-    # Notify client that session is ready
-    await websocket.send_json({
-        "type": "SESSION_READY",
-        "model": connected_model,
-        "user_name": user_name,
-        "message": "Nova Live Audio session established."
-    })
+    client = genai.Client(api_key=api_key, http_options={"api_version": "v1beta"})
 
-    # Initialize in-memory session working memory for this WebSocket connection
+    # Session State (persists across Gemini session reconnections)
     session_state = {
         "recent_actions": [],
         "temp_project": {},
         "last_added_project": None
     }
+    latest_resumption_handle: Optional[str] = None
+    audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=60)
+    setup_complete = asyncio.Event()
+    active_session = None
 
     # ── Tool execution helper (Fast sub-100ms execution) ─────────────────────
     async def execute_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -765,20 +742,35 @@ async def live_voice_bridge(websocket: WebSocket):
             voice_logger.log("TOOL_ERROR", f"{name} error: {tool_err} in {elapsed:.1f}ms", elapsed)
             return {"status": "error", "message": str(tool_err)}
 
-    # ── Task: Client to Gemini (Audio PCM & Text Input) ──────────────────────
-    async def client_to_gemini():
-        # Phase-0: running binary frame counter (reset each turn; logged at turn_complete)
-        _binary_frames_this_turn = 0
+    # ── Task: Ping broker (keeps WebSocket open through proxies/tunnels every 15s) ───
+    async def ping_broker():
         try:
-            while True:
+            while websocket.client_state.name == "CONNECTED":
+                await asyncio.sleep(15)
+                if websocket.client_state.name == "CONNECTED":
+                    await websocket.send_json({"type": "PING"})
+        except (asyncio.CancelledError, WebSocketDisconnect):
+            pass
+
+    # ── Task: Browser to Audio Queue & Control Messages ──────────────────────
+    async def browser_to_queue():
+        nonlocal active_session
+        _binary_frames = 0
+        try:
+            while websocket.client_state.name == "CONNECTED":
                 msg = await websocket.receive()
                 if "bytes" in msg and msg["bytes"]:
                     pcm_chunk = msg["bytes"]
-                    _binary_frames_this_turn += 1
-                    voice_logger.log("BROWSER_MSG", f"type=BINARY bytes={len(pcm_chunk)} frame={_binary_frames_this_turn}")
-                    await session.send_realtime_input(
-                        audio={"data": pcm_chunk, "mime_type": "audio/pcm;rate=16000"}
-                    )
+                    _binary_frames += 1
+                    try:
+                        audio_queue.put_nowait(pcm_chunk)
+                    except asyncio.QueueFull:
+                        try:
+                            audio_queue.get_nowait()
+                        except Exception:
+                            pass
+                        audio_queue.put_nowait(pcm_chunk)
+
                 elif "text" in msg and msg["text"]:
                     try:
                         data = json.loads(msg["text"])
@@ -790,63 +782,84 @@ async def live_voice_bridge(websocket: WebSocket):
                             if text:
                                 t_send = time.time()
                                 voice_logger.log("TEXT_IN", f"User query: '{text}'")
-                                await session.send_client_content(
-                                    turns=[types.Content(parts=[types.Part.from_text(text=text)])],
-                                    turn_complete=True
-                                )
-                                voice_logger.log("SENT_TO_MODEL", f"Query forwarded to Gemini in {((time.time() - t_send)*1000):.1f}ms")
+                                if active_session:
+                                    await active_session.send_client_content(
+                                        turns=[types.Content(parts=[types.Part.from_text(text=text)])],
+                                        turn_complete=True
+                                    )
+                                    voice_logger.log("SENT_TO_MODEL", f"Query forwarded to Gemini in {((time.time() - t_send)*1000):.1f}ms")
 
                         elif msg_type == "START_GREETING":
-                            # Gemini Live speaks the greeting natively in its own human-like voice!
-                            t_greet = time.time()
-                            voice_logger.log("GREETING_TRIGGER", f"Requesting native Gemini greeting for '{user_name}'")
-                            greet_prompt = f"Please greet me warmly in one short sentence: 'Hello {user_name}, how can I help you today?'"
-                            await session.send_client_content(
-                                turns=[types.Content(parts=[types.Part.from_text(text=greet_prompt)])],
-                                turn_complete=True
-                            )
-                            voice_logger.log("GREETING_SENT", f"Greeting request dispatched to Gemini in {((time.time() - t_greet)*1000):.1f}ms")
+                            if active_session:
+                                t_greet = time.time()
+                                voice_logger.log("GREETING_TRIGGER", f"Requesting native Gemini greeting for '{user_name}'")
+                                greet_prompt = f"Please greet me warmly in one short sentence: 'Hello {user_name}, how can I help you today?'"
+                                await active_session.send_client_content(
+                                    turns=[types.Content(parts=[types.Part.from_text(text=greet_prompt)])],
+                                    turn_complete=True
+                                )
+                                voice_logger.log("GREETING_SENT", f"Greeting request dispatched to Gemini in {((time.time() - t_greet)*1000):.1f}ms")
 
                         elif msg_type == "PING":
                             await websocket.send_json({"type": "PONG"})
 
-                        elif msg_type == "INTERRUPT":
-                            voice_logger.log("BROWSER_MSG", "type=INTERRUPT received (no server-side handler yet — TODO phase1)")
-
                     except Exception as parse_err:
                         voice_logger.log("WARNING", f"JSON parse error: {parse_err}")
         except (WebSocketDisconnect, RuntimeError):
-            voice_logger.log("WS_DISCONNECT", "Client disconnected from input loop.")
+            pass
         except Exception as e:
-            voice_logger.log("INPUT_ERROR", f"Exception in client_to_gemini: {e}")
-            try:
-                await websocket.send_json({"type": "ERROR", "message": f"Client audio input error: {str(e)}"})
-            except Exception:
-                pass
+            voice_logger.log("INPUT_ERROR", f"Exception in browser_to_queue: {e}")
+
+    # ── Task: Audio Queue -> Gemini Live (waits for setup_complete) ──────────
+    async def queue_to_gemini(session, reconnect_event: asyncio.Event):
+        try:
+            await setup_complete.wait()
+            while websocket.client_state.name == "CONNECTED" and not reconnect_event.is_set():
+                chunk = await audio_queue.get()
+                await session.send_realtime_input(
+                    audio={"data": chunk, "mime_type": "audio/pcm;rate=16000"}
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            voice_logger.log("INPUT_ERROR", f"Exception in queue_to_gemini: {e}")
+            if websocket.client_state.name == "CONNECTED":
+                try:
+                    await websocket.send_json({"type": "ERROR", "message": f"Microphone forward error: {str(e)}"})
+                except Exception:
+                    pass
 
     # ── Task: Gemini to Client (Audio stream & Tool events) ──────────────────
-    async def gemini_to_client():
+    async def gemini_to_client(session, reconnect_event: asyncio.Event):
+        nonlocal latest_resumption_handle
         try:
-            while websocket.client_state.name == "CONNECTED":
+            while websocket.client_state.name == "CONNECTED" and not reconnect_event.is_set():
                 first_chunk_received = False
                 total_audio_bytes = 0
-                _turn_audio_chunks = 0  # Phase-0: count audio chunks per turn
+                _turn_audio_chunks = 0
                 turn_received_any = False
 
                 async for response in session.receive():
                     turn_received_any = True
 
-                    # Phase-0: log go_away if present in SDK version
-                    if hasattr(response, 'go_away') and response.go_away:
-                        voice_logger.log("GO_AWAY", "Server sent go_away signal — reconnect recommended")
-
-                    # Phase-0: log session resumption handle updates
+                    # 1. Update session resumption handle
                     if hasattr(response, 'session_resumption_update') and response.session_resumption_update:
                         sru = response.session_resumption_update
                         new_handle = getattr(sru, 'new_handle', None)
-                        voice_logger.log("SESSION_RESUMPTION", f"Resumption handle updated new_handle={'<set>' if new_handle else '<none>'}")
+                        if new_handle:
+                            latest_resumption_handle = new_handle
+                            voice_logger.log("SESSION_RESUMPTION", f"Handle updated: {latest_resumption_handle}")
+                            await websocket.send_json({"type": "SESSION_RESUMED", "handle": latest_resumption_handle})
 
-                    # 1. Handle top-level tool call requests
+                    # 2. Server GoAway notification: trigger seamless reconnect with latest handle
+                    if hasattr(response, 'go_away') and response.go_away:
+                        time_left = getattr(response.go_away, 'time_left', None)
+                        voice_logger.log("GO_AWAY", f"Server sent go_away signal — time_left={time_left}")
+                        await websocket.send_json({"type": "RECONNECTING", "reason": "go_away", "timeLeft": str(time_left)})
+                        reconnect_event.set()
+                        break
+
+                    # 3. Handle top-level tool call requests
                     if response.tool_call and response.tool_call.function_calls:
                         function_responses = []
                         for fc in response.tool_call.function_calls:
@@ -890,7 +903,7 @@ async def live_voice_bridge(websocket: WebSocket):
                             except Exception as fb_err:
                                 voice_logger.log("TOOL_RETURN_ERROR", f"All tool response methods failed: {resp_err} | {fb_err}")
 
-                    # 2. Direct streaming audio PCM & text chunks from Live API
+                    # 4. Direct streaming audio PCM & text chunks from Live API
                     if hasattr(response, 'data') and response.data:
                         chunk_len = len(response.data)
                         total_audio_bytes += chunk_len
@@ -909,7 +922,7 @@ async def live_voice_bridge(websocket: WebSocket):
                                 "text": text_chunk
                             })
 
-                    # 3. Handle server_content
+                    # 5. Handle server_content
                     if response.server_content:
                         sc = response.server_content
                         if sc.interrupted:
@@ -994,25 +1007,93 @@ async def live_voice_bridge(websocket: WebSocket):
                     await asyncio.sleep(0.05)
 
         except (asyncio.CancelledError, WebSocketDisconnect):
-            voice_logger.log("WS_DISCONNECT", "gemini_to_client loop terminated.")
+            pass
         except Exception as e:
             voice_logger.log("OUTPUT_ERROR", f"Exception in gemini_to_client: {e}")
-            try:
-                await websocket.send_json({"type": "ERROR", "message": f"Streaming output error: {str(e)}"})
-            except Exception:
-                pass
+            if websocket.client_state.name == "CONNECTED":
+                try:
+                    await websocket.send_json({"type": "ERROR", "message": f"Streaming output error: {str(e)}"})
+                except Exception:
+                    pass
 
-    # Run bidirectional pipeline concurrently
+    # ── Main Connection Loop with Resumption & Reconnection ──────────────────
+    browser_task = asyncio.create_task(browser_to_queue())
+    ping_task = asyncio.create_task(ping_broker())
+
+    is_reconnect = False
     try:
-        task1 = asyncio.create_task(client_to_gemini())
-        task2 = asyncio.create_task(gemini_to_client())
-        done, pending = await asyncio.wait([task1, task2], return_when=asyncio.FIRST_COMPLETED)
-        for p in pending:
-            p.cancel()
+        while websocket.client_state.name == "CONNECTED":
+            setup_complete.clear()
+            reconnect_event = asyncio.Event()
+
+            config = build_nova_config(student_doc, user_name, resumption_handle=latest_resumption_handle)
+
+            if is_reconnect:
+                voice_logger.log("RECONNECT", f"Reconnecting to Gemini Live (resumption_handle={'<set>' if latest_resumption_handle else '<none>'})...")
+                await websocket.send_json({"type": "RECONNECTING"})
+
+            primary_model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-latest")
+            fallback_model = os.getenv("GEMINI_LIVE_FALLBACK_MODEL")
+
+            models_to_try = [primary_model]
+            if fallback_model and fallback_model.strip() and fallback_model != primary_model:
+                models_to_try.append(fallback_model.strip())
+
+            session = None
+            connected_model = None
+            last_err = None
+
+            for model_name in models_to_try:
+                try:
+                    if model_name != primary_model:
+                        voice_logger.log("FALLBACK_MODEL_USED", f"WARNING: Primary live model '{primary_model}' failed. Falling back to configured fallback '{model_name}'!")
+                    voice_logger.log("CONNECT", f"Attempting live connection to {model_name}...")
+                    ctx = client.aio.live.connect(model=model_name, config=config)
+                    session = await ctx.__aenter__()
+                    connected_model = model_name
+                    break
+                except Exception as conn_err:
+                    last_err = conn_err
+                    voice_logger.log("CONNECT_ERROR", f"Model {model_name} failed: {conn_err}")
+
+            if session is None:
+                voice_logger.log("ERROR", f"Failed to connect to configured Gemini Live Audio model(s): {last_err}")
+                await websocket.send_json({"type": "ERROR", "message": f"Failed to connect to Gemini Live Audio service: {str(last_err)}"})
+                if not is_reconnect:
+                    break
+                else:
+                    await asyncio.sleep(1.0)
+                    continue
+
+            is_reconnect = True
+            active_session = session
+            setup_complete.set()
+
+            await websocket.send_json({
+                "type": "SESSION_READY",
+                "model": connected_model,
+                "user_name": user_name,
+                "message": "Nova Live Audio session established."
+            })
+
+            t_in = asyncio.create_task(queue_to_gemini(session, reconnect_event))
+            t_out = asyncio.create_task(gemini_to_client(session, reconnect_event))
+            t_rec = asyncio.create_task(reconnect_event.wait())
+
+            done, pending = await asyncio.wait([t_in, t_out, t_rec], return_when=asyncio.FIRST_COMPLETED)
+            for p in pending:
+                p.cancel()
+
+            active_session = None
+            try:
+                await session.close()
+            except Exception as close_err:
+                voice_logger.log("SESSION_CLOSE_WARN", f"Session close: {close_err}")
+
+            if websocket.client_state.name != "CONNECTED":
+                break
     finally:
+        browser_task.cancel()
+        ping_task.cancel()
         session_duration = (time.time() - t_ws_connect) * 1000
         voice_logger.log("WS_CLEANUP", f"Cleaning up live voice session (duration={session_duration:.1f}ms)", session_duration)
-        try:
-            await session.close()
-        except Exception as close_err:
-            voice_logger.log("SESSION_CLOSE_WARN", f"Session close note: {close_err}")

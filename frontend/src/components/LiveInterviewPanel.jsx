@@ -20,6 +20,8 @@ export default function LiveInterviewPanel() {
     isEvaluating,
     historyList,
     startInterview,
+    retryInterview,
+    isFailed,
     endInterview,
     clearTranscript,
     clearSummary,
@@ -55,11 +57,17 @@ export default function LiveInterviewPanel() {
       case 'CONNECTED':
       case 'LISTENING':
       case 'READY_FOR_CANDIDATE':
+      case 'connected':
         return { text: 'LIVE • FULL DUPLEX', bg: '#059669', pulse: true };
       case 'CONNECTING':
+      case 'connecting':
         return { text: 'CONNECTING...', bg: '#d97706', pulse: true };
       case 'RECONNECTING':
-        return { text: 'RECONNECTING...', bg: '#dc2626', pulse: true };
+      case 'reconnecting':
+        return { text: 'RECONNECTING...', bg: '#d97706', pulse: true };
+      case 'FAILED':
+      case 'failed':
+        return { text: 'CONNECTION FAILED', bg: '#dc2626', pulse: false };
       default:
         return { text: 'STANDBY', bg: '#4b5563', pulse: false };
     }
@@ -407,7 +415,19 @@ export default function LiveInterviewPanel() {
 
           {/* Action Control Buttons */}
           <div style={styles.controlsRow}>
-            {!isConnected && !isConnecting ? (
+            {isFailed ? (
+              <button
+                id="retry-interview-btn"
+                onClick={retryInterview}
+                style={{
+                  ...styles.primaryStartBtn,
+                  backgroundColor: '#dc2626',
+                  boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)',
+                }}
+              >
+                🔄 Retry Connection
+              </button>
+            ) : !isConnected && !isConnecting ? (
               <button
                 id="start-interview-btn"
                 onClick={startInterview}

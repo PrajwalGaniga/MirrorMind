@@ -2,16 +2,20 @@
  * gemini-live-client.js — Client-Side Google Gemini Live Audio Bridge for Nova
  *
  * Establishes a persistent, bidirectional WebSocket connection with /api/voice/live:
- * - Streams live microphone audio (16kHz 16-bit PCM) to Gemini Live.
+ * - Streams live microphone audio (16kHz 16-bit PCM) to Gemini Live via AudioWorklet.
  * - Gaplessly plays back real-time 24kHz PCM audio streams from Gemini Live.
- * - Handles live tool actions (navigation, document opening, portfolio updates).
- * - Implements conversational barge-in / interruption flushing.
- * - Persistent connection across conversation turns (only sleeps after extended silence, e.g. 60s).
- * - Real-time dual-direction audio level analysis for fluid wave visualization.
+ * - Connection state machine: idle -> connecting -> connected -> reconnecting -> failed.
+ * - Exponential backoff with jitter and 30s stable connection counter reset.
+ * - Idle timeout (default 5 min) with visible "Still there?" prompt at 30s remaining.
+ * - AudioContext resume on user gesture / incoming audio chunk; full cleanup on disconnect.
+ * - Online/offline and visibilitychange listeners for automatic recovery.
  */
 
 import { voiceLog } from './logger';
 import { AudioWorkletCapture } from './audio-worklet-capture';
+
+const DEFAULT_IDLE_TIMEOUT = parseInt(import.meta.env?.VITE_NOVA_IDLE_TIMEOUT_SEC || '300', 10);
+const MAX_RECONNECT_ATTEMPTS = parseInt(import.meta.env?.VITE_VOICE_MAX_RECONNECTS || '6', 10);
 
 export class GeminiLiveClient {
   constructor({
@@ -22,8 +26,9 @@ export class GeminiLiveClient {
     onUIAction = () => {},
     onStatusChange = () => {},
     onSilenceTick = () => {},
+    onIdleWarning = () => {},
     onError = () => {},
-    silenceTimeoutSeconds = 30,
+    silenceTimeoutSeconds = DEFAULT_IDLE_TIMEOUT,
     speakerMode = false,
   } = {}) {
     this.onAudioLevel = onAudioLevel;
@@ -33,8 +38,12 @@ export class GeminiLiveClient {
     this.onUIAction = onUIAction;
     this.onStatusChange = onStatusChange;
     this.onSilenceTick = onSilenceTick;
+    this.onIdleWarning = onIdleWarning;
     this.onError = onError;
-    this.silenceTimeoutSeconds = silenceTimeoutSeconds;
+    this.idleTimeoutSeconds = silenceTimeoutSeconds || DEFAULT_IDLE_TIMEOUT;
+
+    // Connection state machine: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+    this.state = 'idle';
 
     this.ws = null;
     this.capture = null;
@@ -48,14 +57,57 @@ export class GeminiLiveClient {
     this.isConnected = false;
     this.isMuted = false;
     this.isTurnComplete = false;
+    this.isManualDisconnect = false;
 
-    // Silence watchdog state
-    this.silenceTimer = null;
-    this.silenceSecondsRemaining = silenceTimeoutSeconds;
-    this.silenceInterval = null;
+    // Reconnection parameters
+    this.reconnectAttempts = 0;
+    this.maxReconnects = MAX_RECONNECT_ATTEMPTS;
+    this.reconnectTimer = null;
+    this.stableConnectionTimer = null;
 
-    // Continuous audio animation monitor
+    // Stored credentials for reconnect
+    this.lastToken = '';
+    this.lastOptions = {};
+
+    // Idle watchdog state
+    this.idleSecondsRemaining = this.idleTimeoutSeconds;
+    this.idleInterval = null;
+    this.isIdleWarningActive = false;
+
+    // Audio animation monitor
     this.monitorRafId = null;
+
+    // Network / tab visibility event listeners
+    this._handleOnline = () => {
+      console.log('[NOVA][NET] Browser came online.');
+      voiceLog.push('NOVA', 'NETWORK_ONLINE', {});
+      if (this.state === 'reconnecting' || this.state === 'failed') {
+        this.retry();
+      }
+    };
+
+    this._handleOffline = () => {
+      console.log('[NOVA][NET] Browser went offline.');
+      voiceLog.push('NOVA', 'NETWORK_OFFLINE', {});
+      this._setState('reconnecting', { reason: 'offline' });
+    };
+
+    this._handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[NOVA][VISIBILITY] Page became visible.');
+        this.resumeContext();
+        if (this.state === 'reconnecting' || (!this.isConnected && !this.isManualDisconnect && this.state !== 'idle')) {
+          this.retry();
+        }
+      }
+    };
+  }
+
+  _setState(newState, payload = {}) {
+    if (this.state === newState && newState !== 'reconnecting') return;
+    this.state = newState;
+    voiceLog.push('NOVA', 'STATE_CHANGE', { state: newState, ...payload });
+    this.onStatusChange(newState, payload);
   }
 
   /**
@@ -63,33 +115,58 @@ export class GeminiLiveClient {
    * @param {string} token - Student authentication JWT token
    * @param {object} options - Options { autoGreet: boolean }
    */
-  async connect(token = '', { autoGreet = false } = {}) {
-    this.autoGreet = autoGreet;
-    if (this.isConnected) {
-      if (autoGreet) this.startGreeting();
+  async connect(token = '', options = {}) {
+    this.lastToken = token;
+    this.lastOptions = options;
+    this.autoGreet = options.autoGreet || false;
+    this.isManualDisconnect = false;
+
+    this._setupWindowListeners();
+    await this._doConnect();
+  }
+
+  async _doConnect() {
+    if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      if (this.autoGreet) this.startGreeting();
       return;
     }
 
     try {
-      this.onStatusChange('CONNECTING');
+      this._setState('connecting');
 
-      // Determine WebSocket protocol and host
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const wsProtocol = apiUrl.startsWith('https') ? 'wss:' : 'ws:';
       const host = apiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const wsUrl = `${wsProtocol}//${host}/api/voice/live?token=${encodeURIComponent(token)}`;
+      const wsUrl = `${wsProtocol}//${host}/api/voice/live?token=${encodeURIComponent(this.lastToken || '')}`;
+
+      if (this.ws) {
+        try {
+          this.ws.onclose = null;
+          this.ws.close();
+        } catch (_) {}
+      }
 
       this.ws = new WebSocket(wsUrl);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.onopen = async () => {
         voiceLog.push('NOVA', 'WS_OPEN', { url: wsUrl });
-        console.log('[NOVA][CLIENT] Persistent WebSocket connected to Gemini Live.');
+        console.log('[NOVA][CLIENT] Persistent WebSocket opened to Gemini Live.');
         this.isConnected = true;
-        this.onStatusChange('ACTIVE');
+
         this._startSilenceWatchdog();
         await this._startMicCapture();
         this._startAudioMonitor();
+
+        // Start 30s stable connection reset timer
+        if (this.stableConnectionTimer) clearTimeout(this.stableConnectionTimer);
+        this.stableConnectionTimer = setTimeout(() => {
+          if (this.isConnected) {
+            console.log('[NOVA][CLIENT] Connection stable for 30s. Reconnect attempts counter reset to 0.');
+            voiceLog.push('NOVA', 'RECONNECT_RESET', {});
+            this.reconnectAttempts = 0;
+          }
+        }, 30000);
       };
 
       this.ws.onmessage = async (event) => {
@@ -103,7 +180,7 @@ export class GeminiLiveClient {
             const data = JSON.parse(event.data);
             this._handleJsonMessage(data);
           } catch (err) {
-            console.warn('[NOVA][CLIENT] Parse error:', err);
+            console.warn('[NOVA][CLIENT] JSON parse error:', err);
           }
         }
       };
@@ -111,57 +188,123 @@ export class GeminiLiveClient {
       this.ws.onerror = (err) => {
         voiceLog.push('NOVA', 'WS_ERROR', {});
         console.error('[NOVA][CLIENT] WebSocket error:', err);
-        this.onError('Live voice connection error.');
       };
 
       this.ws.onclose = (event) => {
         voiceLog.push('NOVA', 'WS_CLOSE', { code: event?.code, reason: event?.reason });
         console.log('[NOVA][CLIENT] WebSocket closed.');
-        this.disconnect();
+        this.isConnected = false;
+
+        if (this.stableConnectionTimer) {
+          clearTimeout(this.stableConnectionTimer);
+          this.stableConnectionTimer = null;
+        }
+
+        if (!this.isManualDisconnect) {
+          this._scheduleReconnect();
+        } else {
+          this._setState('idle');
+        }
       };
     } catch (err) {
-      console.error('[NOVA][CLIENT] Connection initialization failed:', err);
+      console.error('[NOVA][CLIENT] Connection initialization error:', err);
       this.onError(err.message || 'Failed to initialize live voice.');
-      this.disconnect();
+      if (!this.isManualDisconnect) {
+        this._scheduleReconnect();
+      }
     }
   }
 
+  _scheduleReconnect() {
+    if (this.isManualDisconnect) return;
+
+    if (this.reconnectAttempts >= this.maxReconnects) {
+      console.warn(`[NOVA][CLIENT] Max reconnect attempts (${this.maxReconnects}) exhausted.`);
+      voiceLog.push('NOVA', 'RECONNECT_FAILED', { attempts: this.reconnectAttempts });
+      this._setState('failed', { error: 'Reconnection failed after maximum attempts. Please click Retry.' });
+      return;
+    }
+
+    this.reconnectAttempts++;
+    // Exponential backoff with jitter: 1000 * 1.5^n + random(0-500ms), capped at 10s
+    const delay = Math.min(10000, Math.round(1000 * Math.pow(1.5, this.reconnectAttempts - 1) + Math.random() * 500));
+    voiceLog.push('NOVA', 'RECONNECT_ATTEMPT', { attempt: this.reconnectAttempts, max: this.maxReconnects, delayMs: delay });
+    console.log(`[NOVA][CLIENT] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnects})...`);
+
+    this._setState('reconnecting', { attempt: this.reconnectAttempts, maxAttempts: this.maxReconnects, delayMs: delay });
+
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
+      if (!this.isManualDisconnect) {
+        this._doConnect();
+      }
+    }, delay);
+  }
+
   /**
-   * Starts the 60-second inactivity watchdog.
+   * User or UI manual retry trigger when in failed state.
+   */
+  retry() {
+    console.log('[NOVA][CLIENT] Manual retry triggered.');
+    voiceLog.push('NOVA', 'MANUAL_RETRY', {});
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectAttempts = 0;
+    this.isManualDisconnect = false;
+    this.resumeContext();
+    this._doConnect();
+  }
+
+  /**
+   * Starts the inactivity watchdog (default 5 min) with visible prompt at 30s remaining.
    */
   _startSilenceWatchdog() {
     this._stopSilenceWatchdog();
-    this.silenceSecondsRemaining = this.silenceTimeoutSeconds;
-    this.onSilenceTick(this.silenceSecondsRemaining);
+    this.idleSecondsRemaining = this.idleTimeoutSeconds;
+    this.isIdleWarningActive = false;
+    this.onSilenceTick(this.idleSecondsRemaining);
 
-    this.silenceInterval = setInterval(() => {
-      this.silenceSecondsRemaining -= 1;
-      this.onSilenceTick(Math.max(0, this.silenceSecondsRemaining));
+    this.idleInterval = setInterval(() => {
+      this.idleSecondsRemaining -= 1;
+      this.onSilenceTick(Math.max(0, this.idleSecondsRemaining));
 
-      if (this.silenceSecondsRemaining <= 0) {
-        voiceLog.push('NOVA', 'SILENCE_TIMEOUT', { timeoutSeconds: this.silenceTimeoutSeconds });
-        console.log(`[NOVA][CLIENT] ${this.silenceTimeoutSeconds}s silence timeout reached. Sleeping gracefully.`);
+      // 30s warning before idle disconnect
+      if (this.idleSecondsRemaining <= 30 && !this.isIdleWarningActive && this.idleSecondsRemaining > 0) {
+        this.isIdleWarningActive = true;
+        voiceLog.push('NOVA', 'IDLE_PROMPT', { remainingSec: this.idleSecondsRemaining });
+        this.onIdleWarning(this.idleSecondsRemaining, true);
+        this.onStatusChange('IDLE_PROMPT', { remainingSec: this.idleSecondsRemaining });
+      }
+
+      if (this.idleSecondsRemaining <= 0) {
+        voiceLog.push('NOVA', 'IDLE_TIMEOUT', { timeoutSeconds: this.idleTimeoutSeconds });
+        console.log(`[NOVA][CLIENT] ${this.idleTimeoutSeconds}s idle timeout reached.`);
         this._stopSilenceWatchdog();
-        this.onStatusChange('SILENCE_TIMEOUT');
+        this.onStatusChange('IDLE_TIMEOUT');
         this.disconnect();
       }
     }, 1000);
   }
 
   /**
-   * Resets the silence timeout back to full duration whenever user or agent is active.
+   * Resets the idle timeout back to full duration whenever user or agent is active.
    */
   resetSilenceTimer() {
     if (!this.isConnected) return;
-    this.silenceSecondsRemaining = this.silenceTimeoutSeconds;
-    this.onSilenceTick(this.silenceSecondsRemaining);
+    this.idleSecondsRemaining = this.idleTimeoutSeconds;
+    if (this.isIdleWarningActive) {
+      this.isIdleWarningActive = false;
+      this.onIdleWarning(this.idleTimeoutSeconds, false);
+      this.onStatusChange('IDLE_RESUMED');
+    }
+    this.onSilenceTick(this.idleSecondsRemaining);
   }
 
   _stopSilenceWatchdog() {
-    if (this.silenceInterval) {
-      clearInterval(this.silenceInterval);
-      this.silenceInterval = null;
+    if (this.idleInterval) {
+      clearInterval(this.idleInterval);
+      this.idleInterval = null;
     }
+    this.isIdleWarningActive = false;
   }
 
   startGreeting() {
@@ -181,9 +324,18 @@ export class GeminiLiveClient {
 
     if (type === 'SESSION_READY') {
       console.log(`[NOVA][CLIENT] Session ready with model: ${data.model}, user: ${data.user_name}`);
-      this.onStatusChange('READY', data);
+      this._setState('connected', data);
       if (this.autoGreet) {
         this.startGreeting();
+      }
+    } else if (type === 'RECONNECTING') {
+      console.log('[NOVA][CLIENT] Server notified RECONNECTING:', data);
+      this._setState('reconnecting', data);
+    } else if (type === 'SESSION_RESUMED') {
+      console.log('[NOVA][CLIENT] Session resumed handle:', data.handle);
+    } else if (type === 'PING') {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'PONG' }));
       }
     } else if (type === 'TEXT_CHUNK') {
       this.onTextChunk(data.text);
@@ -201,7 +353,6 @@ export class GeminiLiveClient {
       this._flushAudioPlayback('server_interrupted');
       this.onStatusChange('INTERRUPTED');
     } else if (type === 'TURN_COMPLETE') {
-      // KEEP WEBSOCKET OPEN! Do not disconnect on turn complete.
       console.log('[NOVA][CLIENT] Turn complete. Keeping persistent session active.');
       this.isTurnComplete = true;
       if (this.activeSources.length === 0) {
@@ -209,25 +360,29 @@ export class GeminiLiveClient {
         this.onStatusChange('TURN_COMPLETE');
       }
     } else if (type === 'ERROR') {
+      console.error('[NOVA][CLIENT] Server error:', data.message);
       this.onError(data.message);
     }
   }
 
   /**
-   * Immediately stops active audio playback. Server VAD handles barge-in.
+   * Immediately stops active audio playback.
    */
   interrupt() {
     this._flushAudioPlayback('manual');
-    // Stop sending {type:'INTERRUPT'}. Server VAD handles barge-in.
   }
 
   /**
-   * Captures raw microphone audio via AudioWorkletCapture (16kHz PCM 16-bit, capture-only, no manual VAD).
+   * Captures raw microphone audio via AudioWorkletCapture (16kHz PCM 16-bit).
    */
   async _startMicCapture() {
     try {
+      if (this.capture) {
+        try { this.capture.stop(); } catch (_) {}
+      }
+
       this.capture = new AudioWorkletCapture({
-        enableVAD: false, // capture only: no manual VAD, no ACTIVITY_START/END
+        enableVAD: false,
         onChunk: (pcmArrayBuffer) => this._handleOutgoingMicChunk(pcmArrayBuffer),
         onLevel: (rms) => {
           if (rms > 0.015) {
@@ -250,18 +405,31 @@ export class GeminiLiveClient {
 
   /**
    * Routes outgoing 16kHz PCM16 mic frames to the WebSocket.
-   * When SPEAKER_MODE is enabled, suppresses mic audio while Nova is playing audio.
    */
   _handleOutgoingMicChunk(pcmArrayBuffer) {
     if (!this.isConnected || this.isMuted) return;
 
-    // SPEAKER_MODE: when on, do not send mic audio while assistant is playing audio
     if (this.speakerMode && this.activeSources.length > 0) {
       return;
     }
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(pcmArrayBuffer);
+    }
+  }
+
+  /**
+   * Ensure AudioContext is initialized and resumed on user gestures.
+   */
+  async resumeContext() {
+    if (this.playContext && this.playContext.state === 'suspended') {
+      try {
+        await this.playContext.resume();
+        voiceLog.push('NOVA', 'AUDIO_CONTEXT_RESUME', { trigger: 'gesture_or_visibility' });
+        console.log('[NOVA][AUDIO] Playback AudioContext resumed.');
+      } catch (err) {
+        console.warn('[NOVA][AUDIO] Resume failed:', err);
+      }
     }
   }
 
@@ -279,9 +447,8 @@ export class GeminiLiveClient {
         requestedRate: 24000,
         actualRate: this.playContext.sampleRate,
       });
-      console.debug(`[NOVA][PLAYBACK] Playback AudioContext initialized. Requested: 24000Hz, Actual: ${this.playContext.sampleRate}Hz`);
+      console.debug(`[NOVA][PLAYBACK] AudioContext initialized. Rate: ${this.playContext.sampleRate}Hz`);
 
-      // Create AnalyserNode for audio output visualization
       this.playAnalyser = this.playContext.createAnalyser();
       this.playAnalyser.fftSize = 256;
       this.playAnalyser.smoothingTimeConstant = 0.8;
@@ -289,8 +456,12 @@ export class GeminiLiveClient {
     }
 
     try {
+      // Resume if suspended on incoming audio chunk
       if (this.playContext.state === 'suspended') {
-        this.playContext.resume();
+        voiceLog.push('NOVA', 'AUDIO_CONTEXT_RESUME', { trigger: 'first_audio_chunk' });
+        this.playContext.resume().then(() => {
+          console.log('[NOVA][AUDIO] Playback context auto-resumed on audio chunk.');
+        }).catch((e) => console.warn('[NOVA][AUDIO] Resume note:', e));
       }
 
       const int16View = new Int16Array(arrayBuffer);
@@ -322,6 +493,7 @@ export class GeminiLiveClient {
       source.onended = () => {
         const idx = this.activeSources.indexOf(source);
         if (idx !== -1) this.activeSources.splice(idx, 1);
+        try { source.disconnect(); } catch (_) {}
         if (this.activeSources.length === 0 && this.isTurnComplete) {
           this.isTurnComplete = false;
           console.log('[NOVA][CLIENT] Playback complete. Ready for next query.');
@@ -383,7 +555,6 @@ export class GeminiLiveClient {
 
   /**
    * Stop active audio playback immediately when interrupted.
-   * @param {string} reason - Reason for flushing
    */
   _flushAudioPlayback(reason = 'unknown') {
     voiceLog.push('NOVA', 'FLUSH', { reason, activeSources: this.activeSources.length });
@@ -400,7 +571,7 @@ export class GeminiLiveClient {
   }
 
   /**
-   * Send a text message to Nova directly if needed.
+   * Send a text message to Nova directly.
    */
   sendText(text) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -409,21 +580,42 @@ export class GeminiLiveClient {
     }
   }
 
-  /**
-   * Toggle mute microphone.
-   */
   setMuted(muted) {
     this.isMuted = muted;
   }
 
+  _setupWindowListeners() {
+    window.addEventListener('online', this._handleOnline);
+    window.addEventListener('offline', this._handleOffline);
+    document.addEventListener('visibilitychange', this._handleVisibilityChange);
+  }
+
+  _removeWindowListeners() {
+    window.removeEventListener('online', this._handleOnline);
+    window.removeEventListener('offline', this._handleOffline);
+    document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+  }
+
   /**
-   * Disconnect and clean up all audio and network resources.
+   * Disconnect and clean up all audio and network resources with zero memory leaks.
    */
   disconnect() {
+    this.isManualDisconnect = true;
     this.isConnected = false;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.stableConnectionTimer) {
+      clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
+
     this._stopSilenceWatchdog();
     this._stopAudioMonitor();
     this._flushAudioPlayback('disconnect');
+    this._removeWindowListeners();
 
     if (this.capture) {
       try {
@@ -449,19 +641,16 @@ export class GeminiLiveClient {
 
     if (this.ws) {
       try {
+        this.ws.onclose = null;
         this.ws.close();
       } catch (_) {}
       this.ws = null;
     }
 
-    this.onStatusChange('DISCONNECTED');
+    this._setState('idle');
     this.onAudioLevel(0, 'idle');
   }
 
-  /**
-   * Toggles Speaker Mode (persisted in localStorage).
-   * When on: suppresses mic audio while Nova is speaking to eliminate acoustic feedback.
-   */
   setSpeakerMode(enabled) {
     this.speakerMode = Boolean(enabled);
     try {

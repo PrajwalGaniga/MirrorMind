@@ -187,10 +187,17 @@ export function useLiveInterview({ wsUrl, candidateName, userId, token } = {}) {
     };
   }, []);
 
+  const retryInterview = useCallback(() => {
+    if (clientRef.current) {
+      clientRef.current.retry();
+    }
+  }, []);
+
   return {
     status,
-    isConnected: status === 'CONNECTED' || status === 'LISTENING' || status === 'READY_FOR_CANDIDATE',
-    isConnecting: status === 'CONNECTING' || status === 'RECONNECTING',
+    isConnected: ['CONNECTED', 'LISTENING', 'READY_FOR_CANDIDATE', 'connected'].includes(status),
+    isConnecting: ['CONNECTING', 'RECONNECTING', 'connecting', 'reconnecting'].includes(status),
+    isFailed: ['FAILED', 'failed'].includes(status),
     transcripts,
     micLevel,
     isInterrupted,
@@ -201,6 +208,7 @@ export function useLiveInterview({ wsUrl, candidateName, userId, token } = {}) {
     isEvaluating,
     historyList,
     startInterview,
+    retryInterview,
     endInterview,
     clearTranscript,
     clearSummary,

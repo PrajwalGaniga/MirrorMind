@@ -376,7 +376,9 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
     _vlog(session_id, "WS_CONNECT", f"Candidate connected: {candidate_name} (User: {user_id})")
 
-    audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
+    # Buffer at most ~2s of audio (60 chunks of 20-32ms PCM16)
+    audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=60)
+    setup_complete = asyncio.Event()
 
     # ── Tool execution helper for Interview ───────────────────────────────────
     async def execute_interview_tool(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -402,6 +404,16 @@ async def interview_websocket_proxy(websocket: WebSocket):
             elapsed = (time.time() - t_tool_start) * 1000
             _vlog(session_id, "TOOL_ERROR", f"{name} error: {tool_err} ({elapsed:.1f}ms)")
             return {"status": "error", "message": str(tool_err)}
+
+    # ── Task: Ping broker (keeps WebSocket open through proxies/tunnels every 15s) ───
+    async def ping_broker():
+        try:
+            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
+                await asyncio.sleep(15)
+                if websocket.client_state.name == "CONNECTED":
+                    await websocket.send_json({"type": "PING"})
+        except (asyncio.CancelledError, WebSocketDisconnect):
+            pass
 
     # ── Task 1: Browser -> Audio Queue & Control Messages ────────────────────
     async def browser_to_queue():
@@ -487,6 +499,9 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                     turn_complete=True
                                 )
 
+                        elif m_type == "PING":
+                            await websocket.send_json({"type": "PONG"})
+
                         elif m_type == "END_INTERVIEW":
                             _vlog(session_id, "END_INTERVIEW", "Client requested END_INTERVIEW.")
                             session_ended.set()
@@ -504,11 +519,12 @@ async def interview_websocket_proxy(websocket: WebSocket):
                 except Exception:
                     pass
 
-    # ── Task 2: Audio Queue -> Gemini Live ───────────────────────────────────
-    async def queue_to_gemini(session):
+    # ── Task 2: Audio Queue -> Gemini Live (waits for setup_complete) ────────
+    async def queue_to_gemini(session, reconnect_event: asyncio.Event):
         nonlocal first_audio_chunk_logged
         try:
-            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
+            await setup_complete.wait()
+            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set() and not reconnect_event.is_set():
                 chunk = await audio_queue.get()
                 stats["gemini_forwarded_bytes"] += len(chunk)
                 if not first_audio_chunk_logged:
@@ -528,7 +544,7 @@ async def interview_websocket_proxy(websocket: WebSocket):
                     pass
 
     # ── Task 3: Gemini Live -> Browser ───────────────────────────────────────
-    async def gemini_to_browser(session):
+    async def gemini_to_browser(session, reconnect_event: asyncio.Event):
         nonlocal latest_resumption_handle, t_speech_ended
         _turn_ai_chunks = 0
 
@@ -545,27 +561,34 @@ async def interview_websocket_proxy(websocket: WebSocket):
                 candidate_turn_fragments.clear()
 
         try:
-            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
+            while websocket.client_state.name == "CONNECTED" and not session_ended.is_set() and not reconnect_event.is_set():
                 turn_received_any = False
                 async for msg in session.receive():
                     turn_received_any = True
 
                     # 1. Update session resumption handle
-                    if msg.session_resumption_update and msg.session_resumption_update.new_handle:
-                        latest_resumption_handle = msg.session_resumption_update.new_handle
-                        _vlog(session_id, "SESSION_RESUMPTION", f"Handle updated: {latest_resumption_handle}")
-                        await websocket.send_json({
-                            "type": "SESSION_RESUMED",
-                            "handle": latest_resumption_handle
-                        })
+                    if hasattr(msg, 'session_resumption_update') and msg.session_resumption_update:
+                        sru = msg.session_resumption_update
+                        new_handle = getattr(sru, 'new_handle', None)
+                        if new_handle:
+                            latest_resumption_handle = new_handle
+                            _vlog(session_id, "SESSION_RESUMPTION", f"Handle updated: {latest_resumption_handle}")
+                            await websocket.send_json({
+                                "type": "SESSION_RESUMED",
+                                "handle": latest_resumption_handle
+                            })
 
-                    # 2. Server GoAway notification
-                    if msg.go_away:
-                        _vlog(session_id, "GO_AWAY", f"time_left={getattr(msg.go_away, 'time_left', None)}")
+                    # 2. Server GoAway notification: trigger seamless reconnect before timeLeft expires
+                    if hasattr(msg, 'go_away') and msg.go_away:
+                        time_left = getattr(msg.go_away, 'time_left', None)
+                        _vlog(session_id, "GO_AWAY", f"Server sent go_away signal — time_left={time_left}")
                         await websocket.send_json({
-                            "type": "GO_AWAY",
-                            "timeLeft": msg.go_away.time_left
+                            "type": "RECONNECTING",
+                            "reason": "go_away",
+                            "timeLeft": str(time_left)
                         })
+                        reconnect_event.set()
+                        break
 
                     # 3. Usage & Token Metadata
                     if msg.usage_metadata:
@@ -793,59 +816,111 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
     # ── Main Connection Loop ──────────────────────────────────────────────────
     browser_task = asyncio.create_task(browser_to_queue())
+    ping_task = asyncio.create_task(ping_broker())
+    is_reconnect = False
 
     try:
         while websocket.client_state.name == "CONNECTED" and not session_ended.is_set():
+            setup_complete.clear()
+            reconnect_event = asyncio.Event()
+
             live_config = build_interview_config(resumption_handle=latest_resumption_handle)
-            try:
-                _vlog(session_id, "GEMINI_CONNECT", f"Connecting to Gemini Live ({live_model})...")
-                async with client.aio.live.connect(model=live_model, config=live_config) as session:
-                    active_gemini_session = session
-                    _vlog(session_id, "GEMINI_CONNECTED", "Session connected")
-                    await websocket.send_json({
-                        "type": "STATUS",
-                        "status": "CONNECTED",
-                        "session_id": session_id,
-                        "candidate_name": candidate_name
-                    })
 
-                    # Proactively trigger Alex's opening greeting to introduce candidate
-                    if not has_greeted:
-                        has_greeted = True
-                        greeting_prompt = (
-                            f"Start the technical voice interview immediately now. "
-                            f"{'Greet ' + candidate_name + ' warmly by name' if candidate_name != 'Candidate' else 'Greet the candidate warmly and ask their name'}. "
-                            f"Welcome them to MirrorMind, and invite them to introduce themselves, sharing their background and the technologies or projects they enjoy working on. "
-                            f"Keep your spoken opening to 1 to 2 warm, friendly spoken sentences in clear English. Speak aloud now."
-                        )
-                        try:
-                            await session.send_client_content(
-                                turns=[types.Content(parts=[types.Part.from_text(text=greeting_prompt)])],
-                                turn_complete=True
-                            )
-                            _vlog(session_id, "GREETING_SENT", f"Opening greeting dispatched to Alex for {candidate_name}.")
-                        except Exception as e:
-                            _vlog(session_id, "GREETING_ERROR", str(e))
+            if is_reconnect:
+                _vlog(session_id, "RECONNECT", f"Reconnecting to Gemini Live (resumption_handle={'<set>' if latest_resumption_handle else '<none>'})...")
+                await websocket.send_json({"type": "RECONNECTING"})
 
-                    # Run input and output loops concurrently
-                    t_in = asyncio.create_task(queue_to_gemini(session))
-                    t_out = asyncio.create_task(gemini_to_browser(session))
-                    t_end = asyncio.create_task(session_ended.wait())
+            primary_model = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-latest")
+            fallback_model = os.getenv("GEMINI_LIVE_FALLBACK_MODEL")
 
-                    done, pending = await asyncio.wait([t_in, t_out, t_end], return_when=asyncio.FIRST_COMPLETED)
-                    for p in pending:
-                        p.cancel()
+            models_to_try = [primary_model]
+            if fallback_model and fallback_model.strip() and fallback_model != primary_model:
+                models_to_try.append(fallback_model.strip())
 
-                    if session_ended.is_set() or websocket.client_state.name != "CONNECTED":
-                        break
-            except Exception as conn_err:
-                _vlog(session_id, "RECONNECT", f"Session dropped ({conn_err}). Reconnecting...")
-                if session_ended.is_set() or websocket.client_state.name != "CONNECTED":
+            session = None
+            connected_model = None
+            last_err = None
+
+            for model_name in models_to_try:
+                try:
+                    if model_name != primary_model:
+                        _vlog(session_id, "FALLBACK_MODEL_USED", f"WARNING: Primary model '{primary_model}' failed. Falling back to configured fallback '{model_name}'!")
+                    _vlog(session_id, "GEMINI_CONNECT", f"Connecting to Gemini Live ({model_name})...")
+                    ctx = client.aio.live.connect(model=model_name, config=live_config)
+                    session = await ctx.__aenter__()
+                    connected_model = model_name
                     break
-                await asyncio.sleep(0.5)
+                except Exception as conn_err:
+                    last_err = conn_err
+                    _vlog(session_id, "CONNECT_ERROR", f"Model {model_name} failed: {conn_err}")
+
+            if session is None:
+                _vlog(session_id, "ERROR", f"Failed to connect to configured Gemini Live model(s): {last_err}")
+                await websocket.send_json({"type": "ERROR", "message": f"Failed to connect to Gemini Live Audio service: {str(last_err)}"})
+                if not is_reconnect:
+                    break
+                else:
+                    await asyncio.sleep(1.0)
+                    continue
+
+            is_reconnect = True
+            active_gemini_session = session
+            setup_complete.set()
+
+            await websocket.send_json({
+                "type": "STATUS",
+                "status": "CONNECTED",
+                "session_id": session_id,
+                "candidate_name": candidate_name,
+                "model": connected_model
+            })
+            await websocket.send_json({
+                "type": "SESSION_READY",
+                "model": connected_model,
+                "candidate_name": candidate_name,
+                "message": "Alex Live Audio session established."
+            })
+
+            # Proactively trigger Alex's opening greeting only ONCE on initial session connect, never replay on reconnect!
+            if not has_greeted:
+                has_greeted = True
+                greeting_prompt = (
+                    f"Start the technical voice interview immediately now. "
+                    f"{'Greet ' + candidate_name + ' warmly by name' if candidate_name != 'Candidate' else 'Greet the candidate warmly and ask their name'}. "
+                    f"Welcome them to MirrorMind, and invite them to introduce themselves, sharing their background and the technologies or projects they enjoy working on. "
+                    f"Keep your spoken opening to 1 to 2 warm, friendly spoken sentences in clear English. Speak aloud now."
+                )
+                try:
+                    await session.send_client_content(
+                        turns=[types.Content(parts=[types.Part.from_text(text=greeting_prompt)])],
+                        turn_complete=True
+                    )
+                    _vlog(session_id, "GREETING_SENT", f"Opening greeting dispatched to Alex for {candidate_name}.")
+                except Exception as e:
+                    _vlog(session_id, "GREETING_ERROR", str(e))
+
+            # Run input and output loops concurrently
+            t_in = asyncio.create_task(queue_to_gemini(session, reconnect_event))
+            t_out = asyncio.create_task(gemini_to_browser(session, reconnect_event))
+            t_rec = asyncio.create_task(reconnect_event.wait())
+            t_end = asyncio.create_task(session_ended.wait())
+
+            done, pending = await asyncio.wait([t_in, t_out, t_rec, t_end], return_when=asyncio.FIRST_COMPLETED)
+            for p in pending:
+                p.cancel()
+
+            active_gemini_session = None
+            try:
+                await session.close()
+            except Exception as close_err:
+                _vlog(session_id, "SESSION_CLOSE_WARN", f"Session close: {close_err}")
+
+            if session_ended.is_set() or websocket.client_state.name != "CONNECTED":
+                break
 
     finally:
         browser_task.cancel()
+        ping_task.cancel()
         total_duration = round(time.time() - session_start_time)
         _vlog(session_id, "WS_DISCONNECT", f"Disconnected after {total_duration}s. Generating evaluation for {len(transcript_log)} turns...")
 

@@ -4,14 +4,18 @@
  * Coordinates:
  * - AudioWorklet continuous 16kHz PCM16 microphone streaming.
  * - Gapless 24kHz PCM16 playback via AudioPlaybackManager.
+ * - Connection state machine: idle -> connecting -> connected -> reconnecting -> failed.
+ * - Auto-reconnect with exponential backoff, jitter, and 30s stable connection reset.
+ * - Online/offline & visibility change event handling.
  * - Instant interruption flushing on server 'interrupted' signal.
  * - Live transcript (candidate + interviewer) and real-time debug metrics.
- * - Auto-reconnect with exponential backoff.
  */
 
 import { AudioWorkletCapture } from './audio-worklet-capture';
 import { AudioPlaybackManager } from './audio-playback-manager';
 import { voiceLog } from './logger';
+
+const MAX_RECONNECT_ATTEMPTS = parseInt(import.meta.env?.VITE_VOICE_MAX_RECONNECTS || '6', 10);
 
 export class InterviewLiveClient {
   constructor({
@@ -43,25 +47,65 @@ export class InterviewLiveClient {
     this.onSummary = onSummary;
     this.onError = onError;
 
+    // Connection state machine: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+    this.state = 'idle';
+
     this.ws = null;
     this.capture = null;
     this.playback = new AudioPlaybackManager();
     this.isConnected = false;
     this.shouldReconnect = false;
     this.reconnectAttempts = 0;
-    this.maxReconnectDelayMs = 5000;
+    this.maxReconnects = MAX_RECONNECT_ATTEMPTS;
+    this.reconnectTimer = null;
+    this.stableConnectionTimer = null;
+    this.pendingAudioQueue = [];
 
     // Metrics tracking
     this.lastChunkTime = 0;
     this.chunkCount = 0;
     this.hardwareSampleRate = 0;
     this._lastRms = 0;
+
+    // Online/offline and visibility handlers
+    this._handleOnline = () => {
+      console.log('[INTERVIEW][NET] Network restored online.');
+      voiceLog.push('INTERVIEW', 'NETWORK_ONLINE', {});
+      if (this.state === 'reconnecting' || this.state === 'failed') {
+        this.retry();
+      }
+    };
+
+    this._handleOffline = () => {
+      console.log('[INTERVIEW][NET] Network offline.');
+      voiceLog.push('INTERVIEW', 'NETWORK_OFFLINE', {});
+      this._setState('reconnecting', { reason: 'offline' });
+    };
+
+    this._handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[INTERVIEW][VISIBILITY] Tab became visible.');
+        this.playback.resume();
+        if (this.state === 'reconnecting' || (!this.isConnected && this.shouldReconnect)) {
+          this.retry();
+        }
+      }
+    };
+  }
+
+  _setState(newState, payload = {}) {
+    if (this.state === newState && newState !== 'reconnecting') return;
+    this.state = newState;
+    voiceLog.push('INTERVIEW', 'STATE_CHANGE', { state: newState, ...payload });
+    this.onStatusChange(newState, payload);
   }
 
   async start() {
     this.shouldReconnect = true;
     this.reconnectAttempts = 0;
     this.pendingAudioQueue = [];
+
+    this._setupWindowListeners();
 
     // 1. Initialize microphone capture via AudioWorklet
     this.capture = new AudioWorkletCapture({
@@ -73,9 +117,6 @@ export class InterviewLiveClient {
       },
       onReady: (info) => {
         this.hardwareSampleRate = info.hardwareRate;
-        if (this.isConnected) {
-          this.onStatusChange('LISTENING');
-        }
       },
       onActivityStart: () => {
         if (!this.useManualVad) return;
@@ -108,10 +149,18 @@ export class InterviewLiveClient {
 
   async _connectWebSocket() {
     return new Promise((resolve) => {
-      this.onStatusChange('CONNECTING');
+      this._setState('connecting');
 
       try {
         const url = this.wsUrl || this._getDefaultWsUrl();
+
+        if (this.ws) {
+          try {
+            this.ws.onclose = null;
+            this.ws.close();
+          } catch (_) {}
+        }
+
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
 
@@ -119,10 +168,19 @@ export class InterviewLiveClient {
           voiceLog.push('INTERVIEW', 'WS_OPEN', {});
           console.log('[INTERVIEW][WS] Connected to live interview bridge.');
           this.isConnected = true;
-          this.reconnectAttempts = 0;
-          this.onStatusChange(this.capture?.isWorkletReady ? 'LISTENING' : 'CONNECTED');
+          this._setState('connected');
 
-          // Flush any chunks buffered during handshake
+          // Reset reconnect attempts after 30 seconds of stable connection
+          if (this.stableConnectionTimer) clearTimeout(this.stableConnectionTimer);
+          this.stableConnectionTimer = setTimeout(() => {
+            if (this.isConnected) {
+              console.log('[INTERVIEW] Connection stable for 30s. Reconnect counter reset to 0.');
+              voiceLog.push('INTERVIEW', 'RECONNECT_RESET', {});
+              this.reconnectAttempts = 0;
+            }
+          }, 30000);
+
+          // Flush any mic chunks buffered during handshake
           while (this.pendingAudioQueue.length > 0) {
             const buf = this.pendingAudioQueue.shift();
             this.ws.send(buf);
@@ -135,12 +193,11 @@ export class InterviewLiveClient {
             // Binary frame = 24kHz raw PCM16 audio from Gemini Live
             this.playback.playChunk(event.data);
           } else if (typeof event.data === 'string') {
-            // JSON frame = control, transcript, interrupted, or metrics
             try {
               const msg = JSON.parse(event.data);
               this._handleServerControlMessage(msg);
             } catch (err) {
-              console.warn('[INTERVIEW][WS] Failed to parse control JSON:', err);
+              console.warn('[INTERVIEW][WS] JSON parse error:', err);
             }
           }
         };
@@ -148,18 +205,29 @@ export class InterviewLiveClient {
         this.ws.onerror = (err) => {
           voiceLog.push('INTERVIEW', 'WS_ERROR', {});
           console.error('[INTERVIEW][WS] WebSocket error:', err);
-          this.onError('Live voice connection error');
         };
 
         this.ws.onclose = (event) => {
           voiceLog.push('INTERVIEW', 'WS_CLOSE', { code: event?.code, reason: event?.reason });
           this.isConnected = false;
-          this.onStatusChange('DISCONNECTED');
-          this._scheduleReconnect();
+
+          if (this.stableConnectionTimer) {
+            clearTimeout(this.stableConnectionTimer);
+            this.stableConnectionTimer = null;
+          }
+
+          if (this.shouldReconnect) {
+            this._scheduleReconnect();
+          } else {
+            this._setState('idle');
+          }
+          resolve();
         };
       } catch (err) {
         this.onError(err.message || 'Connection failed');
-        this._scheduleReconnect();
+        if (this.shouldReconnect) {
+          this._scheduleReconnect();
+        }
         resolve();
       }
     });
@@ -167,8 +235,11 @@ export class InterviewLiveClient {
 
   _handleOutgoingMicChunk(pcmArrayBuffer) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      // Buffer up to 1.5 seconds of audio during connection handshake
-      if (this.pendingAudioQueue.length < 38) {
+      // Buffer up to ~2 seconds of audio (60 chunks) during connection handshake
+      if (this.pendingAudioQueue.length < 60) {
+        this.pendingAudioQueue.push(pcmArrayBuffer);
+      } else {
+        this.pendingAudioQueue.shift();
         this.pendingAudioQueue.push(pcmArrayBuffer);
       }
       return;
@@ -179,10 +250,8 @@ export class InterviewLiveClient {
     this.lastChunkTime = now;
     this.chunkCount++;
 
-    // Stream binary 16kHz PCM16 chunk directly with zero extra buffering
     this.ws.send(pcmArrayBuffer);
 
-    // Update real-time chunk metrics
     this.onMetrics({
       hardwareSampleRate: this.hardwareSampleRate,
       chunkBytes: pcmArrayBuffer.byteLength,
@@ -194,14 +263,25 @@ export class InterviewLiveClient {
   _handleServerControlMessage(msg) {
     const type = msg.type;
 
-    if (type === 'INTERRUPTED') {
-      // Immediate cancellation of active/queued AI audio playback
+    if (type === 'STATUS' && msg.status === 'CONNECTED') {
+      this._setState('connected', msg);
+    } else if (type === 'SESSION_READY') {
+      console.log('[INTERVIEW] Session ready with model:', msg.model);
+      this._setState('connected', msg);
+    } else if (type === 'RECONNECTING') {
+      console.log('[INTERVIEW] Server notified RECONNECTING:', msg);
+      this._setState('reconnecting', msg);
+    } else if (type === 'PING') {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'PONG' }));
+      }
+    } else if (type === 'INTERRUPTED') {
       console.log('[INTERVIEW] AI speech interrupted by candidate! Flushing playback queue.');
       this.playback.flush('server_interrupted');
       this.onInterrupted();
     } else if (type === 'TRANSCRIPT') {
       this.onTranscript({
-        role: msg.role, // 'user' or 'assistant'
+        role: msg.role,
         text: msg.text,
         isFinal: msg.isFinal ?? false,
       });
@@ -222,23 +302,46 @@ export class InterviewLiveClient {
         evaluation: msg.evaluation,
         transcript: msg.transcript,
       });
+    } else if (type === 'ERROR') {
+      console.error('[INTERVIEW] Server error:', msg.message);
+      this.onError(msg.message);
     }
   }
 
   _scheduleReconnect() {
     if (!this.shouldReconnect) return;
 
-    this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts - 1), this.maxReconnectDelayMs);
-    voiceLog.push('INTERVIEW', 'RECONNECT_ATTEMPT', { attempt: this.reconnectAttempts, delayMs: delay });
-    console.log(`[INTERVIEW][RECONNECT] Reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})...`);
-    this.onStatusChange('RECONNECTING');
+    if (this.reconnectAttempts >= this.maxReconnects) {
+      console.warn(`[INTERVIEW] Max reconnect attempts (${this.maxReconnects}) exhausted.`);
+      voiceLog.push('INTERVIEW', 'RECONNECT_FAILED', { attempts: this.reconnectAttempts });
+      this._setState('failed', { error: 'Reconnection attempts exhausted. Please click Retry.' });
+      return;
+    }
 
-    setTimeout(() => {
+    this.reconnectAttempts++;
+    // Exponential backoff with jitter: 1000 * 1.5^n + random(0-500ms), capped at 10s
+    const delay = Math.min(10000, Math.round(1000 * Math.pow(1.5, this.reconnectAttempts - 1) + Math.random() * 500));
+    voiceLog.push('INTERVIEW', 'RECONNECT_ATTEMPT', { attempt: this.reconnectAttempts, max: this.maxReconnects, delayMs: delay });
+    console.log(`[INTERVIEW][RECONNECT] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnects})...`);
+
+    this._setState('reconnecting', { attempt: this.reconnectAttempts, maxAttempts: this.maxReconnects, delayMs: delay });
+
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
       if (this.shouldReconnect) {
         this._connectWebSocket();
       }
     }, delay);
+  }
+
+  retry() {
+    console.log('[INTERVIEW] Manual retry triggered.');
+    voiceLog.push('INTERVIEW', 'MANUAL_RETRY', {});
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectAttempts = 0;
+    this.shouldReconnect = true;
+    this.playback.resume();
+    this._connectWebSocket();
   }
 
   _getDefaultWsUrl() {
@@ -247,7 +350,6 @@ export class InterviewLiveClient {
     const host = apiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const token = this.token || localStorage.getItem('token') || '';
 
-    // Candidate identification
     let name = this.candidateName || '';
     let uid = this.userId || '';
     if (!name || !uid) {
@@ -270,10 +372,25 @@ export class InterviewLiveClient {
     return `${wsProtocol}//${host}/api/voice/interview-ws${qs ? '?' + qs : ''}`;
   }
 
+  _setupWindowListeners() {
+    window.addEventListener('online', this._handleOnline);
+    window.addEventListener('offline', this._handleOffline);
+    document.addEventListener('visibilitychange', this._handleVisibilityChange);
+  }
+
+  _removeWindowListeners() {
+    window.removeEventListener('online', this._handleOnline);
+    window.removeEventListener('offline', this._handleOffline);
+    document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+  }
+
   async endSession() {
     this.shouldReconnect = false;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.stableConnectionTimer) clearTimeout(this.stableConnectionTimer);
+
     if (this.capture) {
-      this.capture.stop();
+      try { this.capture.stop(); } catch (_) {}
       this.capture = null;
     }
     if (this.playback) {
@@ -283,7 +400,6 @@ export class InterviewLiveClient {
       try {
         this.ws.send(JSON.stringify({ type: 'END_INTERVIEW' }));
       } catch (_) {}
-      // Brief pause to allow summary arrival before closing socket
       await new Promise((r) => setTimeout(r, 600));
     }
     this.stop();
@@ -293,8 +409,19 @@ export class InterviewLiveClient {
     this.shouldReconnect = false;
     this.isConnected = false;
 
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.stableConnectionTimer) {
+      clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
+
+    this._removeWindowListeners();
+
     if (this.capture) {
-      this.capture.stop();
+      try { this.capture.stop(); } catch (_) {}
       this.capture = null;
     }
 
@@ -304,11 +431,12 @@ export class InterviewLiveClient {
 
     if (this.ws) {
       try {
+        this.ws.onclose = null;
         this.ws.close();
       } catch (_) {}
       this.ws = null;
     }
 
-    this.onStatusChange('DISCONNECTED');
+    this._setState('idle');
   }
 }

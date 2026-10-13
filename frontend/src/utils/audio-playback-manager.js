@@ -22,7 +22,24 @@ export class AudioPlaybackManager {
       this.nextStartTime = this.audioContext.currentTime;
     }
     if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+      voiceLog.push('PLAYBACK', 'AUDIO_CONTEXT_RESUME', { previousState: this.audioContext.state });
+      this.audioContext.resume().then(() => {
+        console.log('[PLAYBACK] AudioContext resumed successfully.');
+      }).catch((e) => {
+        console.warn('[PLAYBACK] Failed to resume AudioContext:', e);
+      });
+    }
+  }
+
+  async resume() {
+    this._initContext();
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+        voiceLog.push('PLAYBACK', 'AUDIO_CONTEXT_RESUME', { trigger: 'user_gesture' });
+      } catch (err) {
+        console.warn('[PLAYBACK] Manual resume failed:', err);
+      }
     }
   }
 
