@@ -5,7 +5,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 # pyrefly: ignore [missing-import]
 from bson import ObjectId
 from db import get_db
-from models.db_models import Student
 from auth_utils import decode_token
 from inference.predictor import predict_career, build_profile_text, USE_MOCK
 
@@ -196,7 +195,7 @@ def developer_demo():
 
 
 @router.get("/my-pipeline")
-def my_pipeline(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db: Session = Depends(get_db)):
+async def my_pipeline(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db = Depends(get_db)):
     if not credentials:
         raise HTTPException(status_code=401, detail="Login to run on your real profile")
     payload = decode_token(credentials.credentials)
@@ -204,28 +203,29 @@ def my_pipeline(credentials: HTTPAuthorizationCredentials = Depends(bearer_schem
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    student = db.query(Student).filter_by(user_id=user_id).first()
+    student = await db.students.find_one({"user_id": user_id})
     if not student:
         raise HTTPException(status_code=404, detail="No profile found. Complete onboarding first.")
 
-    projects = len(student.projects)
-    internships = len(student.internships)
+    projects = len(student.get("projects", []))
+    internships = len(student.get("internships", []))
     
-    if student.semester_records:
-        total_credits = sum(r.credits_earned for r in student.semester_records)
-        cgpa = float(sum(r.sgpa * r.credits_earned for r in student.semester_records) / total_credits) if total_credits > 0 else 0.0
+    semester_records = student.get("semester_records", [])
+    if semester_records:
+        total_credits = sum(r.get("credits_earned", 0) for r in semester_records)
+        cgpa = float(sum(r.get("sgpa", 0.0) * r.get("credits_earned", 0) for r in semester_records) / total_credits) if total_credits > 0 else 0.0
     else:
-        cgpa = 0.0
+        cgpa = float(student.get("cgpa", 0.0) or 0.0)
 
     demo_format = {
-        "name": student.name or "",
-        "branch": student.branch or "",
+        "name": student.get("name", ""),
+        "branch": student.get("branch", ""),
         "cgpa": cgpa,
-        "semester": student.semester or 0,
-        "skills": student.skills or [],
+        "semester": student.get("semester", 0),
+        "skills": student.get("skills", []),
         "projects": projects,
         "internships": internships,
-        "career_interest": student.career_interest or ""
+        "career_interest": student.get("career_interest", "")
     }
     result = _build_pipeline(demo_format, 0)
     return result
