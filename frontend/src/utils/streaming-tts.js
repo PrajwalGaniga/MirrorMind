@@ -107,7 +107,9 @@ class StreamingTTS {
             return;
           }
 
-          const int16 = new Int16Array(event.data);
+          const arrayBuffer = event.data;
+          const validBytes = arrayBuffer.byteLength - (arrayBuffer.byteLength % 2);
+          const int16 = new Int16Array(arrayBuffer, 0, validBytes / 2);
           const float32 = new Float32Array(int16.length);
           for (let i = 0; i < int16.length; i++) {
             float32[i] = int16[i] / 32768;
@@ -121,11 +123,21 @@ class StreamingTTS {
           source.playbackRate.value = 1.0;
           source.connect(this.audioCtx.destination);
 
-          const startAt = Math.max(this.audioCtx.currentTime, this.nextStartTime);
+          const currentTime = this.audioCtx.currentTime;
+          const isIdle = this.scheduledSources.length === 0 || this.nextStartTime <= currentTime;
+          let startAt = isIdle ? currentTime + 0.10 : this.nextStartTime;
+          if (startAt - currentTime > 0.30) {
+            startAt = currentTime + 0.10;
+          }
           source.start(startAt);
           this.nextStartTime = startAt + buffer.duration;
           
           this.scheduledSources.push(source);
+          source.onended = () => {
+            const idx = this.scheduledSources.indexOf(source);
+            if (idx !== -1) this.scheduledSources.splice(idx, 1);
+            try { source.disconnect(); } catch (_) {}
+          };
         };
 
         this.ws.onerror = (e) => {

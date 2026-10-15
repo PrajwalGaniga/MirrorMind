@@ -20,6 +20,7 @@ from google.genai import types
 
 from db import database as db
 from auth_utils import decode_token
+from services.voice_logger import voice_logger
 
 router = APIRouter(prefix="/api/voice", tags=["live_interview"])
 
@@ -27,12 +28,12 @@ router = APIRouter(prefix="/api/voice", tags=["live_interview"])
 # ── Phase-0: Structured debug logger (gated on DEBUG_VOICE env) ───────────────
 def _vlog(session_id: str, category: str, message: str) -> None:
     """Structured timestamped logger for the interview pipeline.
+    Routes to voice_logger (which writes to logs/voice_live.log and stdout).
     All output is suppressed when DEBUG_VOICE=false/0/no in environment.
     """
     if os.getenv("DEBUG_VOICE", "true").strip().lower() in ("false", "0", "no"):
         return
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    print(f"[{ts}] [{session_id}] [{category.upper()}] {message}", flush=True)
+    voice_logger.log(category, f"[{session_id[:8]}] {message}")
 
 
 # ── System Instruction for Alex, Senior Technical Interviewer & Mentor ─────────
@@ -547,6 +548,8 @@ async def interview_websocket_proxy(websocket: WebSocket):
     async def gemini_to_browser(session, reconnect_event: asyncio.Event):
         nonlocal latest_resumption_handle, t_speech_ended
         _turn_ai_chunks = 0
+        _turn_ai_bytes = 0
+        _turn_start_time = None
 
         def _flush_candidate_turn():
             cand_text = "".join(candidate_turn_fragments).strip()
@@ -648,7 +651,10 @@ async def interview_websocket_proxy(websocket: WebSocket):
 
                     # 5. Direct audio / text in msg
                     if hasattr(msg, 'data') and msg.data:
+                        if _turn_start_time is None:
+                            _turn_start_time = time.time()
                         _turn_ai_chunks += 1
+                        _turn_ai_bytes += len(msg.data)
                         if t_speech_ended is not None:
                             latency_ms = (time.time() - t_speech_ended) * 1000
                             await websocket.send_json({
@@ -675,6 +681,9 @@ async def interview_websocket_proxy(websocket: WebSocket):
                         if sc.interrupted:
                             _vlog(session_id, "INTERRUPTED", "Candidate interrupted Alex. reason=server")
                             ai_turn_fragments.clear()
+                            _turn_ai_chunks = 0
+                            _turn_ai_bytes = 0
+                            _turn_start_time = None
                             await websocket.send_json({"type": "INTERRUPTED"})
 
                         # Real-time Input Transcript (Candidate Speech)
@@ -729,7 +738,10 @@ async def interview_websocket_proxy(websocket: WebSocket):
                             for part in sc.model_turn.parts:
                                 # Part 1: Audio
                                 if part.inline_data and part.inline_data.data:
+                                    if _turn_start_time is None:
+                                        _turn_start_time = time.time()
                                     _turn_ai_chunks += 1
+                                    _turn_ai_bytes += len(part.inline_data.data)
                                     if t_speech_ended is not None:
                                         latency_ms = (time.time() - t_speech_ended) * 1000
                                         await websocket.send_json({
@@ -792,8 +804,12 @@ async def interview_websocket_proxy(websocket: WebSocket):
                                     "is_final": True,
                                     "timestamp": datetime.utcnow().isoformat(),
                                 })
-                            _vlog(session_id, "TURN_COMPLETE", f"Alex turn finished. audio_chunks={_turn_ai_chunks}")
+                            total_audio_sec = _turn_ai_bytes / 48000.0
+                            gen_ms = (time.time() - _turn_start_time) * 1000 if _turn_start_time else 0
+                            _vlog(session_id, "TURN_COMPLETE", f"Alex turn finished. audio_chunks={_turn_ai_chunks} audio_sec={total_audio_sec:.2f}s gen_time={gen_ms:.0f}ms")
                             _turn_ai_chunks = 0
+                            _turn_ai_bytes = 0
+                            _turn_start_time = None
                             ai_turn_fragments.clear()
                             await websocket.send_json({"type": "TURN_COMPLETE"})
                             # Let session.receive() finish iteration naturally without manual break

@@ -55,6 +55,10 @@ export class GeminiLiveClient {
     this.playAnalyser = null;
     this.nextPlayTime = 0;
     this.activeSources = [];
+    this.leadCushionSec = 0.10; // 100ms jitter cushion to absorb network packet jitter
+    this.turnStartTime = 0;
+    this.turnAudioDuration = 0;
+    this.turnChunkCount = 0;
     this.isConnected = false;
     this.isMuted = false;
     this.isTurnComplete = false;
@@ -465,7 +469,8 @@ export class GeminiLiveClient {
         }).catch((e) => console.warn('[NOVA][AUDIO] Resume note:', e));
       }
 
-      const int16View = new Int16Array(arrayBuffer);
+      const validBytes = arrayBuffer.byteLength - (arrayBuffer.byteLength % 2);
+      const int16View = new Int16Array(arrayBuffer, 0, validBytes / 2);
       const float32Data = new Float32Array(int16View.length);
 
       for (let i = 0; i < int16View.length; i++) {
@@ -485,20 +490,54 @@ export class GeminiLiveClient {
       }
 
       const currentTime = this.playContext.currentTime;
-      const startTime = Math.max(currentTime, this.nextPlayTime);
-      source.start(startTime);
+      const isIdle = this.activeSources.length === 0 || this.nextPlayTime <= currentTime;
 
+      let startTime;
+      if (isIdle) {
+        // Initial lead cushion (100ms) absorbs network packet jitter
+        // so subsequent chunks connect seamlessly without starvation gaps
+        startTime = currentTime + this.leadCushionSec;
+        this.turnStartTime = performance.now();
+        this.turnAudioDuration = 0;
+        this.turnChunkCount = 0;
+        console.log(`[NOVA][PLAYBACK] Speech started with ${(this.leadCushionSec * 1000).toFixed(0)}ms jitter cushion.`);
+      } else {
+        startTime = this.nextPlayTime;
+      }
+
+      // If network burst caused timeline to drift too far ahead (> 300ms), gently sync back
+      if (startTime - currentTime > 0.30) {
+        console.warn(`[NOVA][PLAYBACK] Timeline drift (${((startTime - currentTime) * 1000).toFixed(0)}ms). Re-anchoring.`);
+        startTime = currentTime + this.leadCushionSec;
+      }
+
+      source.start(startTime);
       this.nextPlayTime = startTime + audioBuffer.duration;
+      this.turnAudioDuration += audioBuffer.duration;
+      this.turnChunkCount++;
       this.activeSources.push(source);
 
       source.onended = () => {
         const idx = this.activeSources.indexOf(source);
         if (idx !== -1) this.activeSources.splice(idx, 1);
         try { source.disconnect(); } catch (_) {}
-        if (this.activeSources.length === 0 && this.isTurnComplete) {
-          this.isTurnComplete = false;
-          console.log('[NOVA][CLIENT] Playback complete. Ready for next query.');
-          this.onStatusChange('PLAYBACK_COMPLETE');
+        if (this.activeSources.length === 0) {
+          const wallClockSec = (performance.now() - this.turnStartTime) / 1000;
+          const speedRatio = this.turnAudioDuration / (wallClockSec || 1);
+          console.log(
+            `[NOVA][PLAYBACK] Turn speech concluded. Total audio: ${this.turnAudioDuration.toFixed(2)}s | Wall clock: ${wallClockSec.toFixed(2)}s | Playback rate: ${speedRatio.toFixed(2)}x | Chunks: ${this.turnChunkCount}`
+          );
+          voiceLog.push('NOVA', 'TURN_CONCLUDED', {
+            audioDurationSec: this.turnAudioDuration,
+            wallClockSec,
+            speedRatio,
+            chunks: this.turnChunkCount,
+          });
+          if (this.isTurnComplete) {
+            this.isTurnComplete = false;
+            console.log('[NOVA][CLIENT] Playback complete. Ready for next query.');
+            this.onStatusChange('PLAYBACK_COMPLETE');
+          }
         }
       };
     } catch (err) {

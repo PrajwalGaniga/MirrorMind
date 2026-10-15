@@ -13,6 +13,10 @@ export class AudioPlaybackManager {
     this.nextStartTime = 0;
     this.activeSources = new Set();
     this.targetSampleRate = 24000;
+    this.leadCushionSec = 0.10; // 100ms jitter buffer to eliminate packet starvation & buzzing vibration
+    this.turnStartTime = 0;
+    this.turnAudioDuration = 0;
+    this.turnChunkCount = 0;
   }
 
   _initContext() {
@@ -45,6 +49,7 @@ export class AudioPlaybackManager {
 
   /**
    * Schedule incoming 24kHz PCM16 ArrayBuffer chunk onto the playback timeline.
+   * Employs a 100ms jitter cushion to guarantee gapless audio without robotic vibration.
    * @param {ArrayBuffer} pcmArrayBuffer - Raw 24kHz 16-bit Mono PCM bytes
    */
   playChunk(pcmArrayBuffer) {
@@ -56,7 +61,10 @@ export class AudioPlaybackManager {
     try {
       this._initContext();
 
-      const int16View = new Int16Array(pcmArrayBuffer);
+      // Guard against odd byte lengths (Int16Array requires multiple of 2)
+      const byteLen = pcmArrayBuffer.byteLength;
+      const validBytes = byteLen - (byteLen % 2);
+      const int16View = new Int16Array(pcmArrayBuffer, 0, validBytes / 2);
       const float32Data = new Float32Array(int16View.length);
 
       // Convert Int16 [-32768, 32767] to normalized Float32 [-1.0, 1.0]
@@ -75,12 +83,32 @@ export class AudioPlaybackManager {
       source.buffer = audioBuffer;
       source.connect(this.audioContext.destination);
 
-      // Gapless scheduling
       const currentTime = this.audioContext.currentTime;
-      const startTime = Math.max(currentTime, this.nextStartTime);
-      source.start(startTime);
+      const isIdle = this.activeSources.size === 0 || this.nextStartTime <= currentTime;
 
+      let startTime;
+      if (isIdle) {
+        // Initial lead cushion (100ms) absorbs network packet jitter
+        // so subsequent chunks connect seamlessly without starvation gaps
+        startTime = currentTime + this.leadCushionSec;
+        this.turnStartTime = performance.now();
+        this.turnAudioDuration = 0;
+        this.turnChunkCount = 0;
+        console.log(`[PLAYBACK] Speech started with ${(this.leadCushionSec * 1000).toFixed(0)}ms jitter cushion.`);
+      } else {
+        startTime = this.nextStartTime;
+      }
+
+      // If network burst caused timeline to drift too far ahead (> 300ms), gently sync back
+      if (startTime - currentTime > 0.30) {
+        console.warn(`[PLAYBACK] Timeline drift (${((startTime - currentTime) * 1000).toFixed(0)}ms). Re-anchoring.`);
+        startTime = currentTime + this.leadCushionSec;
+      }
+
+      source.start(startTime);
       this.nextStartTime = startTime + audioBuffer.duration;
+      this.turnAudioDuration += audioBuffer.duration;
+      this.turnChunkCount++;
       this.activeSources.add(source);
 
       source.onended = () => {
@@ -88,6 +116,20 @@ export class AudioPlaybackManager {
         try {
           source.disconnect();
         } catch (_) {}
+
+        if (this.activeSources.size === 0) {
+          const wallClockSec = (performance.now() - this.turnStartTime) / 1000;
+          const speedRatio = this.turnAudioDuration / (wallClockSec || 1);
+          console.log(
+            `[PLAYBACK] Turn speech concluded. Total audio: ${this.turnAudioDuration.toFixed(2)}s | Wall clock: ${wallClockSec.toFixed(2)}s | Playback rate: ${speedRatio.toFixed(2)}x | Chunks: ${this.turnChunkCount}`
+          );
+          voiceLog.push('PLAYBACK', 'TURN_CONCLUDED', {
+            audioDurationSec: this.turnAudioDuration,
+            wallClockSec,
+            speedRatio,
+            chunks: this.turnChunkCount,
+          });
+        }
       };
     } catch (err) {
       console.error('[PLAYBACK][DECODE_ERROR] Failed to decode/schedule audio chunk:', err);
