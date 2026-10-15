@@ -76,6 +76,8 @@ class BrowserTTS {
       if (this.selectedVoice) {
         utterance.voice = this.selectedVoice;
       }
+      utterance.rate = 1.0; // Standard 100% conversational speech speed
+      utterance.pitch = 1.0;
 
       utterance.onstart = () => {
         console.log(`[MIRRORMIND][BROWSER_TTS] speech_started`);

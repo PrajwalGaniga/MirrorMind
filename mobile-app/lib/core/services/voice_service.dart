@@ -61,7 +61,14 @@ class VoiceService {
     if (!_isTtsInitialized) {
       try {
         await _tts.setLanguage('en-US');
-        await _tts.setSpeechRate(0.5);
+        // flutter_tts uses platform-specific rate scales:
+        // On Android, 1.0 is 100% normal conversational speed (0.5 was playing in 50% slow-motion).
+        // On iOS, 0.5 is the system default normal speech rate.
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          await _tts.setSpeechRate(0.5);
+        } else {
+          await _tts.setSpeechRate(1.0);
+        }
         await _tts.setVolume(1.0);
         await _tts.setPitch(1.0);
         _isTtsInitialized = true;

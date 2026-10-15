@@ -118,6 +118,7 @@ class StreamingTTS {
 
           const source = this.audioCtx.createBufferSource();
           source.buffer = buffer;
+          source.playbackRate.value = 1.0;
           source.connect(this.audioCtx.destination);
 
           const startAt = Math.max(this.audioCtx.currentTime, this.nextStartTime);
