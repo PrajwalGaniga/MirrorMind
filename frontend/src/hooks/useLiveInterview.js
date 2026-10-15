@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { InterviewLiveClient } from '../utils/interview-live-client';
+import { API_BASE_URL } from '../api/axios';
 
 /**
  * useLiveInterview — High-performance React hook for full-duplex Gemini Live voice interview
@@ -33,7 +34,7 @@ export function useLiveInterview({ wsUrl, candidateName, userId, token } = {}) {
 
   const fetchPastInterviews = useCallback(async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const apiUrl = API_BASE_URL;
       const authToken = token || localStorage.getItem('token') || '';
       const res = await fetch(`${apiUrl}/api/voice/interviews/history?token=${encodeURIComponent(authToken)}`, {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
@@ -51,7 +52,7 @@ export function useLiveInterview({ wsUrl, candidateName, userId, token } = {}) {
 
   const fetchLatestEvaluation = useCallback(async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const apiUrl = API_BASE_URL;
       const authToken = token || localStorage.getItem('token') || '';
       const res = await fetch(`${apiUrl}/api/voice/interviews/latest?token=${encodeURIComponent(authToken)}`, {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},

@@ -14,6 +14,7 @@
 import { AudioWorkletCapture } from './audio-worklet-capture';
 import { AudioPlaybackManager } from './audio-playback-manager';
 import { voiceLog } from './logger';
+import { API_BASE_URL } from '../api/axios';
 
 const MAX_RECONNECT_ATTEMPTS = parseInt(import.meta.env?.VITE_VOICE_MAX_RECONNECTS || '6', 10);
 
@@ -145,6 +146,15 @@ export class InterviewLiveClient {
 
     // 2. Connect to the FastAPI WebSocket proxy
     await this._connectWebSocket();
+  }
+
+  _getDefaultWsUrl() {
+    const wsProtocol = API_BASE_URL.startsWith('https') ? 'wss:' : 'ws:';
+    const host = API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const candidate = encodeURIComponent(this.candidateName || 'Candidate');
+    const uid = encodeURIComponent(this.userId || '');
+    const tok = encodeURIComponent(this.token || '');
+    return `${wsProtocol}//${host}/api/voice/interview-ws?token=${tok}&user_id=${uid}&name=${candidate}`;
   }
 
   async _connectWebSocket() {

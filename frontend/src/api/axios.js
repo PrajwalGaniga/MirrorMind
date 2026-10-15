@@ -9,11 +9,27 @@ const USE_NGROK = true;
 
 export const LOCAL_URL = 'http://localhost:8000';
 export const NGROK_URL = 'https://dawdlingly-pseudoinsane-pa.ngrok-free.dev';
+export const RENDER_URL = 'https://mirrormind-uwiz.onrender.com';
 
-// Priority: 1. Environment variable (e.g. Vercel) -> 2. USE_NGROK toggle -> 3. Localhost
+// Detect if running in production browser (e.g. Vercel deployment: mirrormindai.vercel.app)
+const isBrowser = typeof window !== 'undefined';
+const isProductionHost = isBrowser && (
+  window.location.hostname.includes('vercel.app') ||
+  window.location.hostname.includes('mirrormind')
+);
+
+// Priority:
+// 1. Explicit VITE_API_URL environment variable (from Vercel dashboard or .env)
+// 2. Production host fallback (mirrormindai.vercel.app -> RENDER_URL)
+// 3. Localhost development -> USE_NGROK ? NGROK_URL : LOCAL_URL
 export const API_BASE_URL = 
   import.meta.env.VITE_API_URL || 
-  (USE_NGROK ? NGROK_URL : LOCAL_URL);
+  (isProductionHost ? RENDER_URL : (USE_NGROK ? NGROK_URL : LOCAL_URL));
+
+export function getWsBaseUrl() {
+  const base = API_BASE_URL.replace(/^http/, 'ws');
+  return base.replace(/\/+$/, '');
+}
 
 console.log(`[MIRRORMIND][API] Connected to backend at: ${API_BASE_URL}`);
 

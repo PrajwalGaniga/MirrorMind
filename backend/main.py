@@ -18,12 +18,14 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "https://dawdlingly-pseudoinsane-pa.ngrok-free.dev", # ngrok Public Tunnel
     "https://mirrormindai.vercel.app",                  # Vercel Production Frontend
+    "https://mirrormind-uwiz.onrender.com",             # Render Backend Service
     "*",                                                # Wildcard fallback
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

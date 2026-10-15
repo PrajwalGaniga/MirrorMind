@@ -13,6 +13,7 @@
 
 import { voiceLog } from './logger';
 import { AudioWorkletCapture } from './audio-worklet-capture';
+import { API_BASE_URL } from '../api/axios';
 
 const DEFAULT_IDLE_TIMEOUT = parseInt(import.meta.env?.VITE_NOVA_IDLE_TIMEOUT_SEC || '300', 10);
 const MAX_RECONNECT_ATTEMPTS = parseInt(import.meta.env?.VITE_VOICE_MAX_RECONNECTS || '6', 10);
@@ -134,7 +135,7 @@ export class GeminiLiveClient {
     try {
       this._setState('connecting');
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const apiUrl = API_BASE_URL;
       const wsProtocol = apiUrl.startsWith('https') ? 'wss:' : 'ws:';
       const host = apiUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
       const wsUrl = `${wsProtocol}//${host}/api/voice/live?token=${encodeURIComponent(this.lastToken || '')}`;
