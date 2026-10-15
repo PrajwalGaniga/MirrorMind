@@ -36,13 +36,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(String name, String email, String password) async {
+  Future<bool> register(String email, String password, [String? name]) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
+      final effectiveName = (name != null && name.trim().isNotEmpty) ? name.trim() : email.split('@')[0];
       final resp = await _api.post(ApiConstants.register,
-          data: {'name': name, 'email': email, 'password': password});
+          data: {'name': effectiveName, 'email': email, 'password': password});
       final data = resp.data as Map<String, dynamic>;
       await _api.saveToken(data['token'] as String);
       _user = UserModel.fromJson(data['user'] as Map<String, dynamic>);

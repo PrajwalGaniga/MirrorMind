@@ -4,12 +4,20 @@ import '../core/constants/api.dart';
 import '../core/services/api_service.dart';
 import '../core/services/voice_service.dart';
 import '../core/services/live_voice_websocket_service.dart';
+import '../core/services/mobile_intent_service.dart';
+import 'student_provider.dart';
 import '../models/intelligence_model.dart';
 
 class IntelligenceProvider extends ChangeNotifier {
   final ApiService _api = ApiService();
   final VoiceService _voice = VoiceService();
   final LiveVoiceWebSocketService _liveWs = LiveVoiceWebSocketService();
+  final MobileIntentService _intentService = MobileIntentService();
+  StudentProvider? _studentProvider;
+
+  void bindStudentProvider(StudentProvider sp) {
+    _studentProvider = sp;
+  }
 
   final List<IntelligenceMessage> _messages = [];
   bool _isQuerying = false;
@@ -86,10 +94,16 @@ class IntelligenceProvider extends ChangeNotifier {
       _activeToolName = null;
       if (action == 'PROJECT_ADDED') {
         _lastActionResult = '✨ Project added to your portfolio!';
+      } else if (action == 'PROJECT_DELETED') {
+        _lastActionResult = '🗑️ Project deleted from database!';
       } else if (action == 'INTERNSHIP_ADDED') {
         _lastActionResult = '💼 Internship experience saved!';
+      } else if (action == 'INTERNSHIP_DELETED') {
+        _lastActionResult = '🗑️ Internship removed from database!';
       } else if (action == 'PROFILE_UPDATED') {
         _lastActionResult = '🎓 Profile details updated!';
+      } else if (action == 'APP_LAUNCHED') {
+        _lastActionResult = '🚀 Launched ${data['app'] ?? 'app'}!';
       } else if (action == 'NAVIGATE') {
         _lastActionResult = '🚀 Navigating to ${data['path'] ?? 'screen'}...';
       }
@@ -134,9 +148,15 @@ class IntelligenceProvider extends ChangeNotifier {
       case 'add_project':
         final title = args['title'] ?? 'new project';
         return 'Adding project "$title" to portfolio...';
+      case 'delete_project':
+        final title = args['title'] ?? 'project';
+        return 'Deleting project "$title" from database...';
       case 'add_internship':
         final comp = args['company_name'] ?? 'internship';
         return 'Recording experience at $comp...';
+      case 'delete_internship':
+        final comp = args['company_name'] ?? 'internship';
+        return 'Removing internship at $comp...';
       case 'update_profile':
         final f = args['field'] ?? 'profile';
         return 'Updating $f on your academic profile...';
@@ -363,7 +383,12 @@ class IntelligenceProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> askQuestion(String question, {bool speakResponse = false, String? userName}) async {
+  Future<void> askQuestion(
+    String question, {
+    bool speakResponse = false,
+    String? userName,
+    StudentProvider? studentProvider,
+  }) async {
     if (question.trim().isEmpty) return;
 
     final userMsg = IntelligenceMessage(
@@ -378,6 +403,57 @@ class IntelligenceProvider extends ChangeNotifier {
     _voiceState = VoiceState.queryProcessing;
     _error = null;
     notifyListeners();
+
+    // ── Local Intent Interceptor (Fast App Launch, Database Details, Database Mutations) ──
+    final effectiveStudentProv = studentProvider ?? _studentProvider;
+    if (effectiveStudentProv != null) {
+      final intentRes = await _intentService.evaluate(
+        question.trim(),
+        studentProvider: effectiveStudentProv,
+      );
+
+      if (intentRes.handled) {
+        _isQuerying = false;
+        _lastActionResult = intentRes.displayText;
+
+        final aiMsg = IntelligenceMessage(
+          id: (DateTime.now().millisecondsSinceEpoch + 1).toString(),
+          text: intentRes.displayText,
+          isUser: false,
+          timestamp: DateTime.now(),
+          provider: 'Nova Intent Engine',
+          model: intentRes.type == MobileIntentType.appLaunch
+              ? 'App Launcher Intent'
+              : (intentRes.type == MobileIntentType.navigation ? 'Navigation Intent' : 'MongoDB Twin Sync'),
+        );
+        _messages.add(aiMsg);
+
+        if (intentRes.uiAction != null) {
+          onUIActionCallback?.call(intentRes.uiAction!, intentRes.actionData ?? {});
+        }
+
+        if (speakResponse || _handsFree) {
+          _voiceState = VoiceState.speakingAnswer;
+          notifyListeners();
+          final cleanSpeech = intentRes.spokenReply.replaceAll(RegExp(r'[*#_`]'), '');
+          await _voice.speak(
+            cleanSpeech,
+            onComplete: () {
+              if (_handsFree && userName != null) {
+                _startWakeListening(userName);
+              } else {
+                _voiceState = VoiceState.idle;
+                notifyListeners();
+              }
+            },
+          );
+        } else {
+          _voiceState = VoiceState.idle;
+          notifyListeners();
+        }
+        return;
+      }
+    }
 
     // ── Live WebSocket Path (Nova Real-Time Agent with Automation Tools) ──
     if (_useLiveWebSocket) {

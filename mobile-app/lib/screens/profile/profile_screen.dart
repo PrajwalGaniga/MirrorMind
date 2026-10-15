@@ -13,45 +13,99 @@ import '../settings/settings_screen.dart';
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
+  void _confirmLogout(BuildContext context, AuthProvider auth) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardWhite,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700)),
+        content: const Text('Are you sure you want to sign out of MirrorMind?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textCaption)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.rose,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(90, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              auth.logout();
+            },
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final student = context.watch<StudentProvider>().student;
 
     return Scaffold(
+      backgroundColor: AppTheme.canvas,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(child: Text('Profile', style: AppTheme.heading2(context))),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Student Profile', style: AppTheme.heading2(context)),
+                      const SizedBox(height: 2),
+                      Text('Your verified digital twin data', style: AppTheme.caption(context)),
+                    ],
+                  ),
                   GestureDetector(
-                    onTap: () {
-                      auth.logout();
-                    },
+                    onTap: () => _confirmLogout(context, auth),
                     child: Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppTheme.softRed,
+                        color: AppTheme.roseBg,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderBlack, width: 2.5),
+                        border: Border.all(color: AppTheme.rose.withValues(alpha: 0.2), width: 1.0),
                       ),
-                      child: const Icon(Icons.logout, size: 20),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.logout_rounded, size: 16, color: AppTheme.rose),
+                          SizedBox(width: 6),
+                          Text(
+                            'Logout',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.rose,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
+
               // Portfolio hero card
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppTheme.lavender,
+                  color: AppTheme.cardWhite,
                   borderRadius: AppTheme.cardRadius,
-                  border: AppTheme.cardBorder,
+                  border: Border.all(color: AppTheme.borderLight, width: 1.0),
                   boxShadow: AppTheme.cardShadow,
                 ),
                 child: Row(
@@ -62,12 +116,47 @@ class ProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(auth.user?.name ?? '', style: AppTheme.sectionTitle(context)),
-                          Text(auth.user?.email ?? '', style: AppTheme.caption(context)),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  auth.user?.name ?? 'Student',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.textPrimary,
+                                    letterSpacing: -0.3,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.verified_rounded, size: 16, color: AppTheme.primary),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            auth.user?.email ?? '',
+                            style: const TextStyle(fontSize: 12, color: AppTheme.textCaption),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                           if (student != null) ...[
-                            const SizedBox(height: 4),
-                            Text('${student.branch} • ${student.collegeTier}',
-                                style: AppTheme.body(context)),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryLight,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${student.branch} • ${student.collegeTier}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.primary,
+                                ),
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -75,12 +164,14 @@ class ProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
+
               if (student != null) ...[
                 const SizedBox(height: 16),
-                _infoCard(context, student.careerInterest, student.semester, student.backlogCount),
+                _infoCard(context, student.careerInterest, student.semester, student.backlogCount, student.cgpa),
                 const SizedBox(height: 16),
                 _skillsCard(context, student.skills, student.certifications),
               ],
+
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -90,21 +181,21 @@ class ProfileScreen extends StatelessWidget {
                         context,
                         MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                       ),
-                      icon: const Icon(Icons.edit_outlined),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
                       label: const Text('Edit Profile'),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.peach,
-                      minimumSize: const Size(52, 48),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(54, 50),
+                      padding: EdgeInsets.zero,
                     ),
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const SettingsScreen()),
                     ),
-                    child: const Icon(Icons.settings_outlined, color: AppTheme.borderBlack),
+                    child: const Icon(Icons.settings_outlined, color: AppTheme.textPrimary, size: 20),
                   ),
                 ],
               ),
@@ -116,63 +207,110 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _infoCard(BuildContext context, String interest, int sem, int backlogs) {
+  Widget _infoCard(BuildContext context, String interest, int sem, int backlogs, double cgpa) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.cardWhite,
         borderRadius: AppTheme.cardRadius,
-        border: AppTheme.cardBorder,
+        border: Border.all(color: AppTheme.borderLight, width: 1.0),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         children: [
-          _infoRow(context, '🎯 Career Interest', interest),
-          const Divider(height: 20),
-          _infoRow(context, '📚 Current Semester', 'Semester $sem'),
-          const Divider(height: 20),
-          _infoRow(context, '⚠️ Backlogs', '$backlogs'),
+          _infoRow('Career Target', interest, Icons.track_changes_rounded, AppTheme.primary),
+          const Divider(height: 22, color: Color(0xFFF1F5F9)),
+          _infoRow('Current Term', 'Semester $sem', Icons.calendar_today_rounded, AppTheme.emerald),
+          const Divider(height: 22, color: Color(0xFFF1F5F9)),
+          _infoRow('Current CGPA', cgpa.toStringAsFixed(2), Icons.grade_rounded, AppTheme.amber),
+          const Divider(height: 22, color: Color(0xFFF1F5F9)),
+          _infoRow(
+            'Active Backlogs',
+            backlogs == 0 ? 'Clear (0)' : '$backlogs Backlogs',
+            Icons.warning_amber_rounded,
+            backlogs == 0 ? AppTheme.emerald : AppTheme.rose,
+          ),
         ],
       ),
     );
   }
 
-  Widget _infoRow(BuildContext context, String label, String value) {
+  Widget _infoRow(String label, String value, IconData icon, Color iconColor) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: AppTheme.caption(context))),
-        Text(value, style: AppTheme.cardTitle(context)),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: iconColor),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: AppTheme.textBody),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
+        ),
       ],
     );
   }
 
   Widget _skillsCard(BuildContext context, List<String> skills, List<String> certs) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.cardWhite,
         borderRadius: AppTheme.cardRadius,
-        border: AppTheme.cardBorder,
+        border: Border.all(color: AppTheme.borderLight, width: 1.0),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Skills', style: AppTheme.cardTitle(context)),
-          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Profile Skills',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+              ),
+              Text('${skills.length} listed', style: const TextStyle(fontSize: 11, color: AppTheme.textCaption)),
+            ],
+          ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
-            runSpacing: 6,
-            children: skills.map((s) => _chip(s, AppTheme.lavender)).toList(),
+            runSpacing: 8,
+            children: skills.map((s) => _skillChip(s)).toList(),
           ),
           if (certs.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Certifications',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                ),
+                Text('${certs.length} verified', style: const TextStyle(fontSize: 11, color: AppTheme.textCaption)),
+              ],
+            ),
             const SizedBox(height: 12),
-            Text('Certifications', style: AppTheme.cardTitle(context)),
-            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              runSpacing: 6,
-              children: certs.map((c) => _chip(c, AppTheme.mint)).toList(),
+              runSpacing: 8,
+              children: certs.map((c) => _certChip(c)).toList(),
             ),
           ],
         ],
@@ -180,16 +318,48 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, Color color) {
+  Widget _skillChip(String label) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+        color: AppTheme.primaryLight,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
       ),
-      child: Text(label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.primary,
+        ),
+      ),
+    );
+  }
+
+  Widget _certChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.emeraldBg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.2), width: 1.0),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.verified_outlined, size: 12, color: AppTheme.emerald),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.emeraldText,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -227,25 +397,27 @@ class _AvatarEditorState extends State<_AvatarEditor> {
       child: Stack(
         children: [
           Container(
-            width: 72,
-            height: 72,
+            width: 68,
+            height: 68,
             decoration: BoxDecoration(
-              color: AppTheme.peach,
+              color: AppTheme.primaryLight,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.borderBlack, width: 3),
+              border: Border.all(color: AppTheme.borderLight, width: 1.5),
               boxShadow: AppTheme.cardShadow,
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(17),
+              borderRadius: BorderRadius.circular(18),
               child: _uploading
                   ? const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(AppTheme.primary)))
                   : widget.avatarUrl != null
                       ? CachedNetworkImage(
                           imageUrl: widget.avatarUrl!,
                           fit: BoxFit.cover,
                         )
-                      : const Icon(Icons.person, size: 36),
+                      : const Center(
+                          child: Icon(Icons.person_rounded, size: 32, color: AppTheme.primary),
+                        ),
             ),
           ),
           Positioned(
@@ -255,11 +427,11 @@ class _AvatarEditorState extends State<_AvatarEditor> {
               width: 22,
               height: 22,
               decoration: BoxDecoration(
-                color: AppTheme.cardWhite,
+                color: AppTheme.primary,
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                border: Border.all(color: Colors.white, width: 1.5),
               ),
-              child: const Icon(Icons.camera_alt, size: 12),
+              child: const Icon(Icons.camera_alt_rounded, size: 11, color: Colors.white),
             ),
           ),
         ],

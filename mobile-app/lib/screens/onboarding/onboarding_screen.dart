@@ -121,18 +121,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppTheme.lavender,
+                color: AppTheme.cardWhite,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.borderBlack, width: 3),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 1.0),
                 boxShadow: AppTheme.cardShadow,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Welcome to MirrorMind! 🚀', style: AppTheme.heading2(context)),
-                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryLight,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text('🧠', style: TextStyle(fontSize: 20)),
+                      ),
+                      const SizedBox(width: 10),
+                      Text('Welcome to MirrorMind! 🚀', style: AppTheme.sectionTitle(context)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   Text(
                     'Let\'s build your academic & skill profile to enable AI career predictions and recommendations.',
                     style: AppTheme.body(context),
@@ -246,12 +259,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 return FilterChip(
                   label: Text(skill.name),
                   selected: isSelected,
-                  selectedColor: AppTheme.mint,
-                  checkmarkColor: AppTheme.borderBlack,
+                  selectedColor: AppTheme.primaryLight,
+                  checkmarkColor: AppTheme.primary,
                   backgroundColor: AppTheme.cardWhite,
+                  labelStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppTheme.primary : AppTheme.textPrimary,
+                  ),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: const BorderSide(color: AppTheme.borderBlack, width: 2),
+                    borderRadius: BorderRadius.circular(999),
+                    side: BorderSide(
+                      color: isSelected ? AppTheme.primary : AppTheme.borderLight,
+                      width: 1.0,
+                    ),
                   ),
                   onSelected: (selected) {
                     setState(() {
@@ -302,13 +323,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             // Submit Button
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.mint,
+                backgroundColor: AppTheme.primary,
                 minimumSize: const Size(double.infinity, 52),
               ),
               onPressed: _loading ? null : _submit,
               child: Text(
                 _loading ? 'Saving Profile…' : 'Complete Onboarding 🚀',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
               ),
             ),
           ],

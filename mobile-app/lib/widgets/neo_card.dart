@@ -8,6 +8,8 @@ class NeoCard extends StatelessWidget {
   final VoidCallback? onTap;
   final double borderWidth;
   final double borderRadius;
+  final Color? borderColor;
+  final List<BoxShadow>? customShadow;
 
   const NeoCard({
     super.key,
@@ -15,27 +17,35 @@ class NeoCard extends StatelessWidget {
     this.backgroundColor = AppTheme.cardWhite,
     this.padding = const EdgeInsets.all(16),
     this.onTap,
-    this.borderWidth = 3,
+    this.borderWidth = 1.0,
     this.borderRadius = 20,
+    this.borderColor,
+    this.customShadow,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cardContent = Container(
+    final borderCol = borderColor ?? AppTheme.borderLight;
+    final cardContent = AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
       padding: padding,
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: AppTheme.borderBlack, width: borderWidth),
-        boxShadow: AppTheme.cardShadow,
+        border: Border.all(color: borderCol, width: borderWidth),
+        boxShadow: customShadow ?? AppTheme.cardShadow,
       ),
       child: child,
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: cardContent,
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: cardContent,
+        ),
       );
     }
 

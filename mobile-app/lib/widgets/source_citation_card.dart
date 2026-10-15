@@ -24,9 +24,9 @@ class _SourceCitationCardState extends State<SourceCitationCard> {
     return Container(
       margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
-        color: AppTheme.cardWhite,
+        color: AppTheme.cardSubtle,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+        border: Border.all(color: AppTheme.borderLight, width: 1.0),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -36,22 +36,22 @@ class _SourceCitationCardState extends State<SourceCitationCard> {
           }
         },
         child: Padding(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppTheme.lavender,
+                      color: AppTheme.primaryLight,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppTheme.borderBlack, width: 1),
+                      border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
                     ),
                     child: Text(
-                      'Source ${widget.index}',
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                      'Ref [${widget.index}]',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.primary),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -69,34 +69,35 @@ class _SourceCitationCardState extends State<SourceCitationCard> {
                   ),
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppTheme.mint,
+                      color: AppTheme.emeraldBg,
                       borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.2), width: 1.0),
                     ),
                     child: Text(
                       'p. ${widget.source.pageStart}',
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.emeraldText),
                     ),
                   ),
                   if (widget.source.text != null && widget.source.text!.isNotEmpty) ...[
                     const SizedBox(width: 4),
                     Icon(
-                      _expanded ? Icons.expand_less : Icons.expand_more,
-                      size: 16,
+                      _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                      size: 18,
                       color: AppTheme.textCaption,
                     ),
                   ],
                 ],
               ),
               if (_expanded && widget.source.text != null && widget.source.text!.isNotEmpty) ...[
-                const Divider(height: 14, color: Color(0xFFE0E0E0)),
+                const Divider(height: 16, color: AppTheme.borderLight),
                 Text(
                   widget.source.text!,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     color: AppTheme.textBody,
-                    height: 1.4,
+                    height: 1.45,
                   ),
                 ),
               ],

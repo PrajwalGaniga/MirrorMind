@@ -10,6 +10,7 @@ import '../../core/services/cloudinary_service.dart';
 import '../../models/student_model.dart';
 import '../predict/predict_screen.dart';
 import '../internships/internships_screen.dart';
+import '../projects/projects_screen.dart';
 import '../intelligence/intelligence_screen.dart';
 import '../documents/documents_screen.dart';
 import '../interview/live_interview_screen.dart';
@@ -24,10 +25,13 @@ class HomeScreen extends StatelessWidget {
     final student = studentProv.student;
 
     return Scaffold(
+      backgroundColor: AppTheme.canvas,
       body: SafeArea(
         child: RefreshIndicator(
+          color: AppTheme.primary,
           onRefresh: () => studentProv.fetchProfile(),
           child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
@@ -36,13 +40,13 @@ class HomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeader(context, auth, student),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
                       _buildHeroBanner(context, student),
                       const SizedBox(height: 16),
-                      _buildHandsFreeCard(context),
+                      _buildNovaVoiceCard(context),
                       const SizedBox(height: 12),
                       _buildLiveInterviewCard(context, student),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
                       _buildStatsRow(context, student),
                       const SizedBox(height: 20),
                       _buildSkillsSection(context, student),
@@ -61,15 +65,40 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context, AuthProvider auth, StudentModel? student) {
+    final firstName = auth.user?.name.split(' ').first ?? 'Student';
     return Row(
       children: [
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Hey, ${auth.user?.name.split(' ').first ?? 'there'} 👋',
-                  style: AppTheme.sectionTitle(context)),
-              Text('Your career dashboard', style: AppTheme.caption(context)),
+              Row(
+                children: [
+                  Text('Hey, $firstName 👋', style: AppTheme.heading2(context)),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.emerald,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Student Digital Twin • Online',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textCaption,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -83,43 +112,97 @@ class HomeScreen extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.lavender,
+        color: AppTheme.cardWhite,
         borderRadius: AppTheme.cardRadius,
-        border: AppTheme.cardBorder,
+        border: Border.all(color: AppTheme.borderLight, width: 1.0),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('🪞', style: TextStyle(fontSize: 32)),
-              const SizedBox(width: 12),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryLight,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
+                ),
+                child: const Center(
+                  child: Text('🧠', style: TextStyle(fontSize: 24)),
+                ),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       student?.name ?? 'Complete your profile',
-                      style: AppTheme.sectionTitle(context),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.2,
+                      ),
                     ),
+                    const SizedBox(height: 4),
                     if (student != null)
-                      Text('${student.branch} • Sem ${student.semester}',
-                          style: AppTheme.caption(context)),
+                      Text(
+                        '${student.branch} • Semester ${student.semester} (${student.collegeTier})',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textCaption,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
+                    else
+                      const Text(
+                        'Set up your student twin to start AI career predictions',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textCaption),
+                      ),
                   ],
                 ),
               ),
             ],
           ),
           if (student != null) ...[
+            const SizedBox(height: 18),
+            Container(
+              height: 1,
+              color: AppTheme.borderLight,
+            ),
             const SizedBox(height: 16),
             Row(
               children: [
-                _metricChip('⭐ CGPA', student.cgpa.toStringAsFixed(2), AppTheme.peach),
-                const SizedBox(width: 8),
-                _metricChip('🏢 Internships', '${student.internshipCount}', AppTheme.mint),
-                const SizedBox(width: 8),
-                _metricChip('🔨 Projects', '${student.projectsCount}', AppTheme.skyBlue),
+                _metricChip('CGPA', student.cgpa.toStringAsFixed(2), Icons.school_rounded, AppTheme.primaryLight, AppTheme.primary),
+                const SizedBox(width: 10),
+                _metricChip(
+                  'Internships',
+                  '${student.internshipCount}',
+                  Icons.business_center_rounded,
+                  AppTheme.emeraldBg,
+                  AppTheme.emeraldText,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const InternshipsScreen()),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _metricChip(
+                  'Projects',
+                  '${student.projectsCount}',
+                  Icons.code_rounded,
+                  AppTheme.purpleBg,
+                  AppTheme.purpleText,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProjectsScreen()),
+                  ),
+                ),
               ],
             ),
           ],
@@ -128,29 +211,60 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _metricChip(String label, String value, Color color) {
+  Widget _metricChip(
+    String label,
+    String value,
+    IconData icon,
+    Color bg,
+    Color textCol, {
+    VoidCallback? onTap,
+  }) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.borderBlack, width: 2),
-        ),
-        child: Column(
-          children: [
-            Text(value,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            Text(label,
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center),
-          ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: textCol.withValues(alpha: 0.12), width: 1.0),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 13, color: textCol),
+                  const SizedBox(width: 4),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: textCol,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: textCol.withValues(alpha: 0.8),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHandsFreeCard(BuildContext context) {
+  Widget _buildNovaVoiceCard(BuildContext context) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -160,23 +274,23 @@ class HomeScreen extends StatelessWidget {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.mint,
+          color: AppTheme.cardWhite,
           borderRadius: AppTheme.cardRadius,
-          border: AppTheme.cardBorder,
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.25), width: 1.0),
           boxShadow: AppTheme.cardShadow,
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.cardWhite,
+                color: AppTheme.primaryLight,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.borderBlack, width: 2),
+                border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
               ),
-              child: const Icon(Icons.mic_rounded, size: 24, color: AppTheme.borderBlack),
+              child: const Icon(Icons.mic_rounded, size: 22, color: AppTheme.primary),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -185,25 +299,38 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text('Hands-Free Voice AI', style: AppTheme.cardTitle(context)),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.lavender,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.borderBlack, width: 1),
+                      const Text(
+                        'Nova Voice Co-Pilot',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
                         ),
-                        child: const Text('VOICE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryLight,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 1.0),
+                        ),
+                        child: const Text(
+                          'VOICE',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.primary),
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text('Say "Hey MirrorMind" to ask anything hands-free', style: AppTheme.caption(context)),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Say "Hey MirrorMind" to ask anything hands-free',
+                    style: TextStyle(fontSize: 12, color: AppTheme.textCaption),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppTheme.borderBlack),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppTheme.textCaption),
           ],
         ),
       ),
@@ -226,23 +353,23 @@ class HomeScreen extends StatelessWidget {
       },
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppTheme.lavender,
+          color: AppTheme.cardWhite,
           borderRadius: AppTheme.cardRadius,
-          border: AppTheme.cardBorder,
+          border: Border.all(color: AppTheme.purple.withValues(alpha: 0.25), width: 1.0),
           boxShadow: AppTheme.cardShadow,
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.cardWhite,
+                color: AppTheme.purpleBg,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.borderBlack, width: 2),
+                border: Border.all(color: AppTheme.purple.withValues(alpha: 0.15), width: 1.0),
               ),
-              child: const Icon(Icons.record_voice_over_rounded, size: 24, color: AppTheme.borderBlack),
+              child: const Icon(Icons.record_voice_over_rounded, size: 22, color: AppTheme.purple),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -251,28 +378,40 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text('AI Mock Interview', style: AppTheme.cardTitle(context)),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.mint,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.borderBlack, width: 1),
+                      const Text(
+                        'AI Mock Interview',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
                         ),
-                        child: const Text('LIVE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.purpleBg,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: AppTheme.purple.withValues(alpha: 0.2), width: 1.0),
+                        ),
+                        child: const Text(
+                          'GEMINI LIVE',
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppTheme.purple),
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text('Real-time technical interview with Alex for $topRole',
-                      style: AppTheme.caption(context),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Real-time simulation with Alex for $topRole',
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textCaption),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppTheme.borderBlack),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppTheme.textCaption),
           ],
         ),
       ),
@@ -284,7 +423,7 @@ class HomeScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Quick Stats', style: AppTheme.sectionTitle(context)),
+        Text('Twin Insights', style: AppTheme.sectionTitle(context)),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -294,7 +433,7 @@ class HomeScreen extends StatelessWidget {
                 icon: '🎯',
                 title: 'Career Focus',
                 value: student.careerInterest,
-                color: AppTheme.peach,
+                bg: AppTheme.cardWhite,
               ),
             ),
             const SizedBox(width: 12),
@@ -304,7 +443,7 @@ class HomeScreen extends StatelessWidget {
                 icon: '💬',
                 title: 'Comm. Rating',
                 value: '${student.communicationRating}/10',
-                color: AppTheme.mint,
+                bg: AppTheme.cardWhite,
               ),
             ),
           ],
@@ -317,25 +456,28 @@ class HomeScreen extends StatelessWidget {
       {required String icon,
       required String title,
       required String value,
-      required Color color}) {
+      required Color bg}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.borderBlack, width: 2.5),
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderLight, width: 1.0),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 24)),
+          Text(icon, style: const TextStyle(fontSize: 22)),
           const SizedBox(height: 8),
           Text(title, style: AppTheme.caption(context)),
           const SizedBox(height: 4),
-          Text(value,
-              style:
-                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -346,7 +488,13 @@ class HomeScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Skills', style: AppTheme.sectionTitle(context)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Verified Skills', style: AppTheme.sectionTitle(context)),
+            Text('${student.skills.length} Total', style: AppTheme.caption(context)),
+          ],
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -356,12 +504,32 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: AppTheme.cardWhite,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderBlack, width: 2),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppTheme.borderLight, width: 1.0),
+                boxShadow: AppTheme.cardShadow,
               ),
-              child: Text(skill,
-                  style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    skill,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
             );
           }).toList(),
         ),
@@ -373,16 +541,18 @@ class HomeScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Quick Actions', style: AppTheme.sectionTitle(context)),
+        Text('Quick Modules', style: AppTheme.sectionTitle(context)),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
               child: _actionCard(
                 context,
-                icon: '✨',
-                label: 'AI Predict',
-                color: AppTheme.lavender,
+                icon: Icons.auto_awesome_rounded,
+                iconColor: AppTheme.primary,
+                iconBg: AppTheme.primaryLight,
+                label: 'AI Predictor',
+                subtitle: 'Match career roles',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const PredictScreen()),
@@ -393,9 +563,11 @@ class HomeScreen extends StatelessWidget {
             Expanded(
               child: _actionCard(
                 context,
-                icon: '🧠',
-                label: 'RAG Assistant',
-                color: AppTheme.mint,
+                icon: Icons.psychology_rounded,
+                iconColor: AppTheme.purple,
+                iconBg: AppTheme.purpleBg,
+                label: 'Nova Assistant',
+                subtitle: 'Ask RAG intelligence',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const IntelligenceScreen()),
@@ -410,9 +582,11 @@ class HomeScreen extends StatelessWidget {
             Expanded(
               child: _actionCard(
                 context,
-                icon: '📁',
-                label: 'Knowledge Base',
-                color: AppTheme.peach,
+                icon: Icons.folder_open_rounded,
+                iconColor: AppTheme.amber,
+                iconBg: AppTheme.amberBg,
+                label: 'Documents',
+                subtitle: 'FAISS Knowledge Base',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const DocumentsScreen()),
@@ -423,12 +597,14 @@ class HomeScreen extends StatelessWidget {
             Expanded(
               child: _actionCard(
                 context,
-                icon: '💼',
-                label: 'Internships',
-                color: AppTheme.skyBlue,
+                icon: Icons.code_rounded,
+                iconColor: AppTheme.emerald,
+                iconBg: AppTheme.emeraldBg,
+                label: 'Projects',
+                subtitle: 'Portfolio intelligence',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const InternshipsScreen()),
+                  MaterialPageRoute(builder: (_) => const ProjectsScreen()),
                 ),
               ),
             ),
@@ -438,29 +614,52 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _actionCard(BuildContext context,
-      {required String icon,
-      required String label,
-      required Color color,
-      required VoidCallback onTap}) {
+  Widget _actionCard(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppTheme.borderBlack, width: 2.5),
+          color: AppTheme.cardWhite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.borderLight, width: 1.0),
           boxShadow: AppTheme.cardShadow,
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(icon, style: const TextStyle(fontSize: 22)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(label,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700)),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppTheme.textCaption,
+              ),
             ),
           ],
         ),
@@ -502,12 +701,12 @@ class _AvatarWidgetState extends State<_AvatarWidget> {
       child: Stack(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: AppTheme.peach,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppTheme.borderBlack, width: 3),
+              color: AppTheme.cardWhite,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.borderLight, width: 1.5),
               boxShadow: AppTheme.cardShadow,
             ),
             child: ClipRRect(
@@ -517,18 +716,21 @@ class _AvatarWidgetState extends State<_AvatarWidget> {
                       imageUrl: widget.avatarUrl!,
                       fit: BoxFit.cover,
                     )
-                  : const Icon(Icons.person, size: 30),
+                  : const Center(
+                      child: Icon(Icons.person_rounded, size: 26, color: AppTheme.textCaption),
+                    ),
             ),
           ),
           if (_uploading)
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.black38,
-                  borderRadius: BorderRadius.circular(18),
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: const Center(
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                ),
               ),
             ),
           Positioned(
@@ -538,11 +740,11 @@ class _AvatarWidgetState extends State<_AvatarWidget> {
               width: 18,
               height: 18,
               decoration: BoxDecoration(
-                color: AppTheme.lavender,
+                color: AppTheme.primary,
                 shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                border: Border.all(color: Colors.white, width: 1.5),
               ),
-              child: const Icon(Icons.edit, size: 10),
+              child: const Icon(Icons.camera_alt_rounded, size: 9, color: Colors.white),
             ),
           ),
         ],

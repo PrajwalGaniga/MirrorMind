@@ -14,9 +14,9 @@ async def register(data: UserRegister, db = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    hashed = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    user_name = (data.name.strip() if data.name and data.name.strip() else data.email.split('@')[0])
     new_user = User(
-        name=data.name,
+        name=user_name,
         email=data.email,
         password=hashed,
     )

@@ -3,6 +3,8 @@ import '../core/services/api_service.dart';
 import '../core/constants/api.dart';
 import '../models/student_model.dart';
 import '../models/skill_model.dart';
+import '../models/project_model.dart';
+import '../models/internship_model.dart';
 
 class StudentProvider extends ChangeNotifier {
   StudentModel? _student;
@@ -46,6 +48,70 @@ class StudentProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<bool> updateProfile(Map<String, dynamic> partialData) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _api.patch(ApiConstants.profileUpdate, data: partialData);
+      await fetchProfile();
+      return true;
+    } catch (e) {
+      _error = 'Failed to update profile';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> addSkill(String skillName) async {
+    final clean = skillName.trim();
+    if (clean.isEmpty) return false;
+    final currentSkills = List<String>.from(_student?.skills ?? []);
+    if (currentSkills.any((s) => s.toLowerCase() == clean.toLowerCase())) {
+      return true; // Already exists
+    }
+    currentSkills.add(clean);
+    return await updateProfile({'skills': currentSkills});
+  }
+
+  Future<bool> deleteProjectByName(String title) async {
+    final query = title.trim().toLowerCase();
+    if (query.isEmpty) return false;
+    final projects = _student?.projects ?? [];
+    ProjectModel? target;
+    for (final p in projects) {
+      if (p.title.trim().toLowerCase() == query ||
+          p.title.trim().toLowerCase().contains(query) ||
+          query.contains(p.title.trim().toLowerCase())) {
+        target = p;
+        break;
+      }
+    }
+    if (target != null) {
+      return await deleteProject(target.id);
+    }
+    return false;
+  }
+
+  Future<bool> deleteInternshipByCompany(String company) async {
+    final query = company.trim().toLowerCase();
+    if (query.isEmpty) return false;
+    final internships = _student?.internships ?? [];
+    InternshipModel? target;
+    for (final i in internships) {
+      if (i.companyName.trim().toLowerCase() == query ||
+          i.companyName.trim().toLowerCase().contains(query) ||
+          query.contains(i.companyName.trim().toLowerCase())) {
+        target = i;
+        break;
+      }
+    }
+    if (target != null) {
+      return await deleteInternship(target.id);
+    }
+    return false;
   }
 
   Future<void> fetchSkills() async {

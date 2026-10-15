@@ -41,12 +41,11 @@ async def _call_gemini(messages: List[Dict[str, str]]) -> str:
     if not api_key:
         raise ValueError("GEMINI_PAID_API_KEY or GEMINI_API_KEY is not configured.")
 
-    primary_model = os.getenv("GEMINI_RAG_MODEL", "gemini-3.1-flash-lite").strip()
+    primary_model = os.getenv("GEMINI_RAG_MODEL", "gemini-2.5-flash").strip()
     candidate_models = [primary_model]
-    for fallback in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.1-pro-preview"]:
+    for fallback in ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-3.1-flash-lite"]:
         if fallback not in candidate_models:
             candidate_models.append(fallback)
-
 
     system_prompt = None
     user_contents = []
@@ -90,12 +89,10 @@ async def _call_gemini(messages: List[Dict[str, str]]) -> str:
             err_str = str(e)
             last_error = err_str
             print(f"[MIRRORMIND][GEMINI][WARNING]\nmodel={model} failed: {err_str}")
-            # If 503 unavailable or 429 quota, try next candidate model
-            if "503" in err_str or "UNAVAILABLE" in err_str or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                continue
-            # For other fatal errors like invalid key, raise immediately
-            if "API_KEY_INVALID" in err_str or "400" in err_str or "401" in err_str:
+            # If invalid key, raise immediately
+            if "API_KEY_INVALID" in err_str or "401" in err_str or "unregistered" in err_str.lower():
                 raise RuntimeError(f"Gemini API Error: {err_str}")
+            # For 404, not found, 429 quota, 503 unavailable, try next candidate model
             continue
 
     print(f"\n[MIRRORMIND][GEMINI][ERROR]\ntype=AllGeminiModelsFailed\nlast_error={last_error}\n")

@@ -106,3 +106,9 @@ backend/uploads/
 
 *.pdf
 new_dataset/model_output/
+
+# Logs & Scratch
+logs/
+*.log
+scratch/
+backend/logs/

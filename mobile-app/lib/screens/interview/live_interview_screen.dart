@@ -54,7 +54,7 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 0.92, end: 1.10).animate(
+    _pulseAnimation = Tween<double>(begin: 0.94, end: 1.06).animate(
       CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
     );
 
@@ -195,31 +195,36 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             color: AppTheme.cardWhite,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: AppTheme.borderBlack, width: 2),
+            boxShadow: AppTheme.cardShadowHover,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Type Your Answer', style: AppTheme.cardTitle(context)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Type Your Answer', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
               const SizedBox(height: 10),
               TextField(
                 controller: _textCtrl,
                 autofocus: true,
                 maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: 'Explain your approach, code design, or architecture…',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: AppTheme.borderBlack, width: 1.5),
-                  ),
+                decoration: const InputDecoration(
+                  hintText: 'Explain your approach, system architecture, or logic…',
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -231,13 +236,9 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
                   ElevatedButton(
                     onPressed: _sendManualAnswer,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.mint,
-                      foregroundColor: AppTheme.borderBlack,
-                      elevation: 0,
-                      side: const BorderSide(color: AppTheme.borderBlack, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      minimumSize: const Size(130, 44),
                     ),
-                    child: const Text('Submit Answer 🚀', style: TextStyle(fontWeight: FontWeight.w800)),
+                    child: const Text('Submit Answer 🚀'),
                   ),
                 ],
               ),
@@ -258,36 +259,33 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.cardWhite,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppTheme.borderBlack, width: 2),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
             Text('🎉 ', style: TextStyle(fontSize: 22)),
-            Text('Interview Completed!', style: TextStyle(fontWeight: FontWeight.w800)),
+            Text('Interview Complete!', style: TextStyle(fontWeight: FontWeight.w800)),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Role: $_selectedRole', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('Target Role: $_selectedRole', style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             Text('Session Duration: ${_formatTimer(_secondsElapsed)}', style: const TextStyle(color: AppTheme.textCaption)),
             const SizedBox(height: 4),
             Text('Exchanges: ${_transcripts.length} messages', style: const TextStyle(color: AppTheme.textCaption)),
             const SizedBox(height: 14),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.mint.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderBlack, width: 1),
+                color: AppTheme.emeraldBg,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.2), width: 1.0),
               ),
               child: const Text(
-                'Great job practicing! Your responses were analyzed in real time. Keep refining your technical communication and project stories.',
-                style: TextStyle(fontSize: 13, height: 1.4),
+                'Great practice session! Alex simulated realistic technical interview questions. Your responses have been indexed into your Digital Twin.',
+                style: TextStyle(fontSize: 13, height: 1.4, color: AppTheme.emeraldText),
               ),
             ),
           ],
@@ -298,14 +296,7 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
               Navigator.pop(ctx); // Close dialog
               Navigator.pop(context); // Exit interview screen
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.lavender,
-              foregroundColor: AppTheme.borderBlack,
-              elevation: 0,
-              side: const BorderSide(color: AppTheme.borderBlack, width: 1.5),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Back to Dashboard', style: TextStyle(fontWeight: FontWeight.w800)),
+            child: const Text('Back to Dashboard'),
           ),
         ],
       ),
@@ -331,10 +322,10 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
     return Scaffold(
       backgroundColor: AppTheme.canvas,
       appBar: AppBar(
-        backgroundColor: AppTheme.canvas,
+        backgroundColor: AppTheme.cardWhite,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppTheme.borderBlack),
+          icon: const Icon(Icons.close_rounded, color: AppTheme.textPrimary),
           onPressed: () {
             if (_transcripts.isNotEmpty) {
               _endInterview();
@@ -352,19 +343,19 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
                   width: 8,
                   height: 8,
                   decoration: const BoxDecoration(
-                    color: Color(0xFF2E7D32),
+                    color: AppTheme.emerald,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 const Text(
-                  'Live Interview with Alex',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.borderBlack),
+                  'Alex • Senior Interviewer',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
                 ),
               ],
             ),
             const Text(
-              'Senior Technical Interviewer',
+              'Gemini Live Technical Simulation',
               style: TextStyle(fontSize: 11, color: AppTheme.textCaption),
             ),
           ],
@@ -374,17 +365,17 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
             margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.cardWhite,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+              color: AppTheme.canvas,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppTheme.borderLight, width: 1.0),
             ),
             child: Row(
               children: [
-                const Icon(Icons.timer_outlined, size: 14, color: AppTheme.borderBlack),
+                const Icon(Icons.timer_outlined, size: 14, color: AppTheme.primary),
                 const SizedBox(width: 4),
                 Text(
                   _formatTimer(_secondsElapsed),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.borderBlack),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                 ),
               ],
             ),
@@ -408,12 +399,15 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
   Widget _buildRoleSelector() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppTheme.lavender.withValues(alpha: 0.4),
+      decoration: const BoxDecoration(
+        color: AppTheme.cardWhite,
+        border: Border(bottom: BorderSide(color: AppTheme.borderLight, width: 1.0)),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.badge_outlined, size: 16, color: AppTheme.borderBlack),
+          const Icon(Icons.badge_outlined, size: 16, color: AppTheme.primary),
           const SizedBox(width: 8),
-          const Text('Role: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          const Text('Role: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textCaption)),
           DropdownButton<String>(
             value: _selectedRole,
             isDense: true,
@@ -421,7 +415,7 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
             items: _roleOptions.map((r) {
               return DropdownMenuItem(
                 value: r,
-                child: Text(r, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                child: Text(r, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
               );
             }).toList(),
             onChanged: (val) {
@@ -436,11 +430,10 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.mint,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.borderBlack, width: 1),
+              color: AppTheme.primaryLight,
+              borderRadius: BorderRadius.circular(6),
             ),
-            child: const Text('Adaptive AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+            child: const Text('Adaptive AI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.primary)),
           ),
         ],
       ),
@@ -450,20 +443,20 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
   Widget _buildErrorBanner() {
     return Container(
       margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.softRed,
+        color: AppTheme.roseBg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+        border: Border.all(color: AppTheme.rose.withValues(alpha: 0.2), width: 1.0),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, size: 18),
+          const Icon(Icons.error_outline_rounded, size: 18, color: AppTheme.rose),
           const SizedBox(width: 8),
-          Expanded(child: Text(_errorMessage!, style: const TextStyle(fontSize: 12))),
+          Expanded(child: Text(_errorMessage!, style: const TextStyle(fontSize: 12, color: AppTheme.roseText))),
           TextButton(
             onPressed: _connect,
-            child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w800, color: AppTheme.borderBlack)),
+            child: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.rose)),
           ),
         ],
       ),
@@ -479,25 +472,25 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
             ScaleTransition(
               scale: _pulseAnimation,
               child: Container(
-                padding: const EdgeInsets.all(28),
+                padding: const EdgeInsets.all(26),
                 decoration: BoxDecoration(
-                  color: AppTheme.lavender,
+                  color: AppTheme.primaryLight,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.borderBlack, width: 3),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 1.5),
                   boxShadow: AppTheme.cardShadow,
                 ),
-                child: const Icon(Icons.graphic_eq_rounded, size: 54, color: AppTheme.borderBlack),
+                child: const Icon(Icons.graphic_eq_rounded, size: 48, color: AppTheme.primary),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             Text(
               'Alex is reviewing your profile…',
               style: AppTheme.cardTitle(context),
             ),
             const SizedBox(height: 6),
-            Text(
-              'Your first technical question will appear shortly.',
-              style: AppTheme.caption(context),
+            const Text(
+              'Your first technical scenario will appear shortly.',
+              style: TextStyle(fontSize: 12, color: AppTheme.textCaption),
             ),
           ],
         ),
@@ -520,36 +513,48 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
             children: [
               if (isAlex) ...[
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: AppTheme.lavender,
+                    color: AppTheme.primaryLight,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.2), width: 1.0),
                   ),
-                  child: const Icon(Icons.person_rounded, size: 16),
+                  child: const Icon(Icons.smart_toy_rounded, size: 16, color: AppTheme.primary),
                 ),
                 const SizedBox(width: 8),
               ],
               Flexible(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: isAlex ? AppTheme.cardWhite : AppTheme.mint,
+                    color: isAlex ? AppTheme.cardWhite : AppTheme.primary,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.borderBlack, width: 2),
-                    boxShadow: AppTheme.cardShadowPressed,
+                    border: Border.all(
+                      color: isAlex ? AppTheme.borderLight : Colors.transparent,
+                      width: 1.0,
+                    ),
+                    boxShadow: AppTheme.cardShadow,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         isAlex ? 'Alex (Interviewer)' : candidateName,
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.textCaption),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: isAlex ? AppTheme.primary : Colors.white70,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         t.text,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, height: 1.4),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: isAlex ? AppTheme.textPrimary : Colors.white,
+                          height: 1.4,
+                        ),
                       ),
                     ],
                   ),
@@ -558,13 +563,12 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
               if (!isAlex) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.mint,
+                  padding: const EdgeInsets.all(7),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primary,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.borderBlack, width: 1.5),
                   ),
-                  child: const Icon(Icons.school_rounded, size: 16),
+                  child: const Icon(Icons.person_rounded, size: 16, color: Colors.white),
                 ),
               ],
             ],
@@ -579,18 +583,18 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.peach,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+        color: AppTheme.amberBg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3), width: 1.0),
       ),
       child: Row(
         children: [
-          const Icon(Icons.mic_rounded, size: 16, color: AppTheme.borderBlack),
+          const Icon(Icons.mic_rounded, size: 16, color: AppTheme.amberText),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _liveCandidateSpeech.isEmpty ? 'Listening to your answer…' : '"$_liveCandidateSpeech"',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              _liveCandidateSpeech.isEmpty ? 'Listening to your response…' : '"$_liveCandidateSpeech"',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.amberText),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -604,7 +608,7 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
       decoration: const BoxDecoration(
         color: AppTheme.cardWhite,
-        border: Border(top: BorderSide(color: AppTheme.borderBlack, width: 2)),
+        border: Border(top: BorderSide(color: AppTheme.borderLight, width: 1.0)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -615,11 +619,11 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
             icon: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppTheme.lavender,
+                color: AppTheme.canvas,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                border: Border.all(color: AppTheme.borderLight, width: 1.0),
               ),
-              child: const Icon(Icons.keyboard_rounded, size: 20, color: AppTheme.borderBlack),
+              child: const Icon(Icons.keyboard_rounded, size: 20, color: AppTheme.textPrimary),
             ),
           ),
 
@@ -630,25 +634,30 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               decoration: BoxDecoration(
-                color: _isMicActive ? AppTheme.softRed : AppTheme.mint,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: AppTheme.borderBlack, width: 2.5),
-                boxShadow: AppTheme.cardShadow,
+                color: _isMicActive ? AppTheme.rose : AppTheme.primary,
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_isMicActive ? AppTheme.rose : AppTheme.primary).withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
                   Icon(
                     _isMicActive ? Icons.stop_rounded : Icons.mic_rounded,
-                    size: 22,
-                    color: AppTheme.borderBlack,
+                    size: 20,
+                    color: Colors.white,
                   ),
                   const SizedBox(width: 8),
                   Text(
                     _isMicActive ? 'Stop Speaking' : 'Tap to Answer',
                     style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.borderBlack,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -662,11 +671,11 @@ class _LiveInterviewScreenState extends State<LiveInterviewScreen>
             icon: Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppTheme.softRed.withValues(alpha: 0.3),
+                color: AppTheme.roseBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                border: Border.all(color: AppTheme.rose.withValues(alpha: 0.2), width: 1.0),
               ),
-              child: const Icon(Icons.call_end_rounded, size: 20, color: Color(0xFFC62828)),
+              child: const Icon(Icons.call_end_rounded, size: 20, color: AppTheme.rose),
             ),
           ),
         ],

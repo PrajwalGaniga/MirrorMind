@@ -6,7 +6,6 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from bson import ObjectId
 from db import get_db
 from models.db_models import Student
-from sqlalchemy.orm import Session
 from auth_utils import decode_token
 from inference.predictor import predict_career, build_profile_text, USE_MOCK
 

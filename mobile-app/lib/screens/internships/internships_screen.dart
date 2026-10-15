@@ -35,12 +35,17 @@ class InternshipsScreen extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppTheme.mint,
+                        color: AppTheme.primary,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppTheme.borderBlack, width: 2.5),
-                        boxShadow: AppTheme.cardShadow,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primary.withValues(alpha: 0.25),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
                       ),
-                      child: const Icon(Icons.add, size: 22),
+                      child: const Icon(Icons.add_rounded, size: 22, color: Colors.white),
                     ),
                   ),
                 ],
@@ -128,8 +133,8 @@ class _InternshipCardState extends State<_InternshipCard> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppTheme.cardWhite,
-          borderRadius: AppTheme.cardRadius,
-          border: AppTheme.cardBorder,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.borderLight, width: 1.0),
           boxShadow: AppTheme.cardShadow,
         ),
         child: Column(
@@ -140,21 +145,32 @@ class _InternshipCardState extends State<_InternshipCard> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: widget.internship.isCurrent ? AppTheme.mint : AppTheme.peach,
+                    color: widget.internship.isCurrent ? AppTheme.emeraldBg : AppTheme.primaryLight,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderBlack, width: 2),
+                    border: Border.all(
+                      color: (widget.internship.isCurrent ? AppTheme.emerald : AppTheme.primary).withValues(alpha: 0.15),
+                      width: 1.0,
+                    ),
                   ),
-                  child: const Text('🏢', style: TextStyle(fontSize: 20)),
+                  child: Icon(
+                    Icons.business_center_rounded,
+                    size: 20,
+                    color: widget.internship.isCurrent ? AppTheme.emeraldText : AppTheme.primary,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.internship.companyName,
-                          style: AppTheme.cardTitle(context)),
-                      Text(widget.internship.role,
-                          style: AppTheme.body(context)),
+                      Text(
+                        widget.internship.companyName,
+                        style: AppTheme.cardTitle(context).copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        widget.internship.role,
+                        style: AppTheme.body(context).copyWith(fontWeight: FontWeight.w500),
+                      ),
                     ],
                   ),
                 ),
@@ -162,41 +178,63 @@ class _InternshipCardState extends State<_InternshipCard> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.mint,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                      color: AppTheme.emeraldBg,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.25), width: 1.0),
                     ),
-                    child: const Text('Current',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Current',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.emeraldText),
+                    ),
                   ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => _showDeleteDialog(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.roseBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.rose.withValues(alpha: 0.2), width: 1.0),
+                    ),
+                    child: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.roseText),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.calendar_month, size: 14, color: AppTheme.textCaption),
+                const Icon(Icons.calendar_month_rounded, size: 14, color: AppTheme.textCaption),
                 const SizedBox(width: 4),
                 Text('$start – $end', style: AppTheme.caption(context)),
                 const SizedBox(width: 12),
-                const Icon(Icons.work_outline, size: 14, color: AppTheme.textCaption),
+                const Icon(Icons.work_outline_rounded, size: 14, color: AppTheme.textCaption),
                 const SizedBox(width: 4),
                 Text(widget.internship.domain, style: AppTheme.caption(context)),
               ],
             ),
             if (widget.internship.description != null) ...[
               const SizedBox(height: 8),
-              Text(widget.internship.description!,
-                  style: AppTheme.body(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text(
+                widget.internship.description!,
+                style: AppTheme.body(context),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
             const SizedBox(height: 12),
             GestureDetector(
               onTap: _uploading ? null : _uploadCertificate,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: hasCert ? AppTheme.mint : AppTheme.lavender,
+                  color: hasCert ? AppTheme.emeraldBg : AppTheme.canvas,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.borderBlack, width: 2),
+                  border: Border.all(
+                    color: hasCert ? AppTheme.emerald.withValues(alpha: 0.3) : AppTheme.borderLight,
+                    width: 1.0,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -208,14 +246,19 @@ class _InternshipCardState extends State<_InternshipCard> {
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : Icon(
                             hasCert
-                                ? Icons.check_circle_outline
-                                : Icons.upload_file_outlined,
-                            size: 14,
+                                ? Icons.verified_rounded
+                                : Icons.upload_file_rounded,
+                            size: 15,
+                            color: hasCert ? AppTheme.emeraldText : AppTheme.textBody,
                           ),
                     const SizedBox(width: 6),
                     Text(
-                      hasCert ? 'Certificate ✓' : 'Upload Certificate',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      hasCert ? 'Certificate Verified ✓' : 'Upload Certificate',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: hasCert ? AppTheme.emeraldText : AppTheme.textBody,
+                      ),
                     ),
                   ],
                 ),
@@ -232,19 +275,26 @@ class _InternshipCardState extends State<_InternshipCard> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: AppTheme.borderBlack, width: 3),
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.borderLight, width: 1.0),
         ),
         title: const Text('Delete Internship?'),
-        content: Text(widget.internship.companyName),
+        content: Text('Are you sure you want to remove your experience at "${widget.internship.companyName}" from your database records?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textCaption)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               context.read<StudentProvider>().deleteInternship(widget.internship.id);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.softRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             child: const Text('Delete'),
           ),
         ],

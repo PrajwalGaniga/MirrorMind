@@ -59,7 +59,7 @@ export default function Settings() {
       <div className="dashboard-body">
         <div className="section-title">Developer Options</div>
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16 }}>Developer Console</div>
               <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>

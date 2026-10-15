@@ -149,6 +149,28 @@ NOVA_TOOLS = [
                 }
             },
             {
+                "name": "delete_project",
+                "description": "Delete or remove a specific project from the student's portfolio and database. Call this whenever the user asks to delete, remove, or drop a project.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "title": {"type": "STRING", "description": "Project title or name to remove (e.g. 'MirrorMind')"}
+                    },
+                    "required": ["title"]
+                }
+            },
+            {
+                "name": "delete_internship",
+                "description": "Delete or remove an internship experience from the student's portfolio and database.",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "company_name": {"type": "STRING", "description": "Company or organization name to remove"}
+                    },
+                    "required": ["company_name"]
+                }
+            },
+            {
                 "name": "open_document",
                 "description": "Open or display a PDF document (resume, CV, certificate, report) on the student's screen.",
                 "parameters": {
@@ -711,6 +733,96 @@ async def live_voice_bridge(websocket: WebSocket):
                     "message": f"Switching to live mock interview with Alex for {target_role}. Opening interview room now.",
                     "target_screen": "/interview"
                 }
+
+            elif name == "delete_project":
+                del_title = str(args.get("title", "")).strip().lower()
+                deleted_proj = None
+                if db is not None and user_id and del_title:
+                    student = await db.students.find_one({"user_id": user_id})
+                    projects = student.get("projects", []) if student else []
+                    remaining = []
+                    for p in projects:
+                        p_title = str(p.get("title", "")).strip().lower()
+                        if not deleted_proj and (p_title == del_title or del_title in p_title or p_title in del_title):
+                            deleted_proj = p
+                        else:
+                            remaining.append(p)
+
+                    if deleted_proj:
+                        await db.students.update_one(
+                            {"user_id": user_id},
+                            {
+                                "$set": {
+                                    "projects": remaining,
+                                    "predictions": None,
+                                    "updated_at": datetime.utcnow()
+                                }
+                            }
+                        )
+
+                if deleted_proj:
+                    p_name = deleted_proj.get("title", del_title)
+                    session_state["recent_actions"].append({
+                        "action": "DELETED_PROJECT",
+                        "title": p_name,
+                        "timestamp": datetime.utcnow().strftime("%H:%M:%S")
+                    })
+                    await websocket.send_json({
+                        "type": "UI_ACTION",
+                        "action": "PROJECT_DELETED",
+                        "title": p_name,
+                        "project": deleted_proj
+                    })
+                    elapsed = (time.time() - t_tool_start) * 1000
+                    voice_logger.log("TOOL_DONE", f"Project '{p_name}' deleted in {elapsed:.1f}ms", elapsed)
+                    return {"status": "success", "message": f"Successfully deleted project '{p_name}' from the database."}
+                else:
+                    return {"status": "not_found", "message": f"Could not find a project matching '{del_title}' in your portfolio."}
+
+            elif name == "delete_internship":
+                comp_query = str(args.get("company_name", "")).strip().lower()
+                deleted_intern = None
+                if db is not None and user_id and comp_query:
+                    student = await db.students.find_one({"user_id": user_id})
+                    internships = student.get("internships", []) if student else []
+                    remaining = []
+                    for i in internships:
+                        c_name = str(i.get("company_name", "")).strip().lower()
+                        if not deleted_intern and (c_name == comp_query or comp_query in c_name or c_name in comp_query):
+                            deleted_intern = i
+                        else:
+                            remaining.append(i)
+
+                    if deleted_intern:
+                        await db.students.update_one(
+                            {"user_id": user_id},
+                            {
+                                "$set": {
+                                    "internships": remaining,
+                                    "predictions": None,
+                                    "updated_at": datetime.utcnow()
+                                }
+                            }
+                        )
+
+                if deleted_intern:
+                    c_name = deleted_intern.get("company_name", comp_query)
+                    session_state["recent_actions"].append({
+                        "action": "DELETED_INTERNSHIP",
+                        "company_name": c_name,
+                        "timestamp": datetime.utcnow().strftime("%H:%M:%S")
+                    })
+                    await websocket.send_json({
+                        "type": "UI_ACTION",
+                        "action": "INTERNSHIP_DELETED",
+                        "company_name": c_name,
+                        "internship": deleted_intern
+                    })
+                    elapsed = (time.time() - t_tool_start) * 1000
+                    voice_logger.log("TOOL_DONE", f"Internship at '{c_name}' deleted in {elapsed:.1f}ms", elapsed)
+                    return {"status": "success", "message": f"Successfully removed internship at '{c_name}' from your portfolio."}
+                else:
+                    return {"status": "not_found", "message": f"Could not find an internship matching '{comp_query}'."}
 
             elif name == "open_document":
                 doc_query = args.get("query", "").lower()

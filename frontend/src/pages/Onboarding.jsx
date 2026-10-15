@@ -147,7 +147,7 @@ export default function Onboarding() {
               <label className="form-label">Full Name</label>
               <input className="form-input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Your full name" required />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="form-row-2col">
               <div className="form-group">
                 <label className="form-label">Branch</label>
                 <select className="form-select" value={form.branch} onChange={e => set('branch', e.target.value)}>

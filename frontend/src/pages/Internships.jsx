@@ -99,7 +99,7 @@ export default function Internships() {
         <form className="card" onSubmit={handleAddInternship} style={{ marginBottom: 32, padding: 24 }}>
           <div className="section-title">Add New Experience</div>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="form-row-2col">
             <div className="form-group">
               <label className="form-label">Role *</label>
               <input required className="form-input" value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Frontend Developer Intern" />
@@ -145,22 +145,22 @@ export default function Internships() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {internships.map(i => (
-              <div key={i.id} className="card" style={{ padding: 24, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-                <div style={{ width: 56, height: 56, borderRadius: 12, background: 'var(--accent-primary)', border: '2px solid #000', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '2px 2px 0 rgba(0,0,0,1)' }}>
-                  <Briefcase size={28} />
+              <div key={i.id} className="card" style={{ padding: 22, display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div style={{ width: 50, height: 50, borderRadius: 12, background: 'var(--primary-light)', color: 'var(--primary)', border: '1px solid rgba(37,99,235,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Briefcase size={24} />
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 20, fontWeight: 800 }}>{i.role}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8 }}>{i.company_name} • {i.domain}</div>
+                <div style={{ flex: 1, minWidth: 'min(100%, 240px)' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy-900)' }}>{i.role}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)', marginBottom: 8 }}>{i.company_name} • {i.domain}</div>
                   {i.description && (
-                    <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 12 }}>{i.description}</div>
+                    <div style={{ fontSize: 14, color: 'var(--slate-700)', lineHeight: 1.5, marginBottom: 12 }}>{i.description}</div>
                   )}
                   {i.certificate_url && (
                     <div style={{ marginBottom: 12 }}>
-                      <a href={i.certificate_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>View Certificate ↗</a>
+                      <a href={i.certificate_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>View Certificate ↗</a>
                     </div>
                   )}
-                  <button className="btn btn-secondary btn-sm" onClick={() => handleDelete(i.id)} style={{ color: 'var(--accent-rose)', borderColor: 'var(--accent-rose)', marginTop: 8 }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => handleDelete(i.id)} style={{ color: 'var(--rose-500)', borderColor: '#FECACA', marginTop: 4 }}>
                     Delete
                   </button>
                 </div>

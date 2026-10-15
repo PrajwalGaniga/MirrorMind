@@ -42,10 +42,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: AppTheme.borderBlack, width: 3),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           backgroundColor: AppTheme.cardWhite,
           title: Text('Upload Document', style: AppTheme.heading2(context)),
           content: Column(
@@ -61,12 +58,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 initialValue: selectedCategory,
-                decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.borderBlack, width: 2),
-                  ),
+                decoration: const InputDecoration(
+                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 ),
                 items: const [
                   DropdownMenuItem(value: 'resume', child: Text('📄 Resume / CV')),
@@ -88,8 +81,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.mint,
-                minimumSize: const Size(100, 40),
+                minimumSize: const Size(110, 42),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Upload PDF'),
@@ -105,7 +98,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(success ? 'Document uploaded successfully!' : (context.read<DocumentProvider>().error ?? 'Upload failed.')),
-            backgroundColor: success ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
+            backgroundColor: success ? AppTheme.emerald : AppTheme.rose,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -117,6 +112,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     final docProv = context.watch<DocumentProvider>();
 
     return Scaffold(
+      backgroundColor: AppTheme.canvas,
       appBar: AppBar(
         title: const Text('Knowledge Base'),
         actions: [
@@ -128,24 +124,24 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: docProv.isUploading ? null : _pickAndUpload,
-        backgroundColor: AppTheme.lavender,
+        backgroundColor: AppTheme.primary,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppTheme.borderBlack, width: 3),
+          borderRadius: BorderRadius.circular(999),
         ),
-        elevation: 0,
+        elevation: 3,
         icon: docProv.isUploading
-            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.upload_file_rounded, color: AppTheme.borderBlack),
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.upload_file_rounded, color: Colors.white),
         label: Text(
           docProv.isUploading ? 'Uploading…' : 'Upload PDF',
-          style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.borderBlack),
+          style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white),
         ),
       ),
       body: RefreshIndicator(
+        color: AppTheme.primary,
         onRefresh: () => docProv.fetchDocuments(),
         child: docProv.isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(AppTheme.primary)))
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
                 children: [
@@ -156,11 +152,11 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                       padding: const EdgeInsets.all(12),
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: AppTheme.softRed,
+                        color: AppTheme.roseBg,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppTheme.borderBlack, width: 2),
+                        border: Border.all(color: AppTheme.rose.withValues(alpha: 0.2), width: 1.0),
                       ),
-                      child: Text(docProv.error!, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      child: Text(docProv.error!, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.roseText)),
                     ),
                   ],
                   if (docProv.documents.isEmpty)
@@ -179,20 +175,20 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     final totalChunks = docs.fold<int>(0, (sum, d) => sum + (d.chunkCount ?? 0));
 
     return NeoCard(
-      backgroundColor: AppTheme.peach,
+      backgroundColor: AppTheme.cardWhite,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.cardWhite,
+                  color: AppTheme.primaryLight,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.borderBlack, width: 2),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
                 ),
-                child: const Icon(Icons.folder_shared_rounded, size: 24),
+                child: const Icon(Icons.folder_shared_rounded, size: 24, color: AppTheme.primary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -200,6 +196,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Document Knowledge Base', style: AppTheme.cardTitle(context)),
+                    const SizedBox(height: 2),
                     Text(
                       'Upload your resumes & certificates to power MirrorMind AI RAG search.',
                       style: AppTheme.caption(context),
@@ -213,9 +210,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _statPill('${docs.length}', 'Documents', AppTheme.cardWhite),
-              _statPill('$totalChunks', 'Text Chunks', AppTheme.mint),
-              _statPill('$embeddedCount / $processedCount', 'Indexed FAISS', AppTheme.lavender),
+              _statPill('${docs.length}', 'Documents', AppTheme.primaryLight, AppTheme.primary),
+              _statPill('$totalChunks', 'Text Chunks', AppTheme.emeraldBg, AppTheme.emeraldText),
+              _statPill('$embeddedCount / $processedCount', 'Indexed FAISS', AppTheme.purpleBg, AppTheme.purpleText),
             ],
           ),
         ],
@@ -223,18 +220,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     );
   }
 
-  Widget _statPill(String value, String label, Color bg) {
+  Widget _statPill(String value, String label, Color bg, Color textCol) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderBlack, width: 2),
+        border: Border.all(color: textCol.withValues(alpha: 0.15), width: 1.0),
       ),
       child: Column(
         children: [
-          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textCol)),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textCol)),
         ],
       ),
     );
@@ -247,8 +245,15 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         backgroundColor: AppTheme.cardWhite,
         child: Column(
           children: [
-            const Icon(Icons.cloud_upload_outlined, size: 56, color: AppTheme.textCaption),
-            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: AppTheme.primaryLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.cloud_upload_outlined, size: 40, color: AppTheme.primary),
+            ),
+            const SizedBox(height: 14),
             Text('No Documents Uploaded Yet', style: AppTheme.cardTitle(context)),
             const SizedBox(height: 6),
             Text(
@@ -256,10 +261,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               style: AppTheme.caption(context),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             ElevatedButton.icon(
               onPressed: _pickAndUpload,
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add, size: 18),
               label: const Text('Upload Your First Document'),
             ),
           ],
@@ -270,7 +275,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   Widget _buildDocumentCard(DocumentModel doc) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 12),
       child: NeoCard(
         backgroundColor: AppTheme.cardWhite,
         child: Column(
@@ -282,11 +287,11 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppTheme.skyBlue,
+                    color: AppTheme.primaryLight,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderBlack, width: 2),
+                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
                   ),
-                  child: const Icon(Icons.picture_as_pdf_rounded, size: 24, color: AppTheme.borderBlack),
+                  child: const Icon(Icons.picture_as_pdf_rounded, size: 22, color: AppTheme.primary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -295,7 +300,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                     children: [
                       Text(
                         doc.filename,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -309,24 +314,21 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                 ),
                 PopupMenuButton<String>(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: const BorderSide(color: AppTheme.borderBlack, width: 2),
+                    borderRadius: BorderRadius.circular(14),
+                    side: const BorderSide(color: AppTheme.borderLight, width: 1.0),
                   ),
                   onSelected: (val) async {
                     if (val == 'delete') {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (ctx) => AlertDialog(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: AppTheme.borderBlack, width: 2),
-                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                           title: const Text('Delete Document?'),
                           content: Text('Are you sure you want to delete "${doc.filename}" and its vector embeddings?'),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                             ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.softRed),
+                              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.rose),
                               onPressed: () => Navigator.pop(ctx, true),
                               child: const Text('Delete'),
                             ),
@@ -343,7 +345,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(value: 'download', child: Text('📥 Download PDF')),
-                    const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete', style: TextStyle(color: Colors.red))),
+                    const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete', style: TextStyle(color: AppTheme.rose))),
                   ],
                 ),
               ],
@@ -360,25 +362,25 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppTheme.canvas,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.borderBlack, width: 1),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: AppTheme.borderLight, width: 1.0),
                     ),
                     child: Text(
                       '${doc.chunkCount} Chunks',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textCaption),
                     ),
                   ),
               ],
             ),
             if (!doc.isProcessed || !doc.isEmbedded) ...[
-              const Divider(height: 20, color: Color(0xFFE5E5E5)),
+              const Divider(height: 20, color: AppTheme.borderLight),
               Row(
                 children: [
                   if (!doc.isProcessed)
                     Expanded(
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.mint,
+                          backgroundColor: AppTheme.emerald,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           minimumSize: const Size(0, 38),
                         ),
@@ -393,14 +395,14 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                     Expanded(
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.lavender,
+                          backgroundColor: AppTheme.primary,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           minimumSize: const Size(0, 38),
                         ),
                         onPressed: doc.isEmbedding
                             ? null
                             : () => context.read<DocumentProvider>().embedDocument(doc.id),
-                        icon: const Icon(Icons.bolt, size: 16),
+                        icon: const Icon(Icons.bolt_rounded, size: 16),
                         label: Text(doc.isEmbedding ? 'Embedding…' : 'Index into FAISS'),
                       ),
                     ),

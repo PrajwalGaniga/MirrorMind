@@ -29,8 +29,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppTheme.borderBlack, width: 3),
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.borderLight, width: 1.0),
         ),
         backgroundColor: AppTheme.cardWhite,
         title: Text('Regenerate API Key', style: AppTheme.heading2(context)),
@@ -50,7 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 labelText: 'Account Password',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.borderBlack, width: 2),
+                  borderSide: const BorderSide(color: AppTheme.borderLight, width: 1.0),
                 ),
               ),
             ),
@@ -63,8 +63,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.peach,
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
               minimumSize: const Size(100, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
             onPressed: () async {
               final pwd = pwdCtrl.text.trim();
@@ -119,6 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = auth.user;
     return NeoCard(
       backgroundColor: AppTheme.cardWhite,
+      borderColor: AppTheme.borderLight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -127,11 +130,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.lavender,
+                  color: AppTheme.primaryLight,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.borderBlack, width: 2),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
                 ),
-                child: const Icon(Icons.person_rounded, size: 24),
+                child: const Icon(Icons.person_rounded, size: 24, color: AppTheme.primary),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -156,6 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return NeoCard(
       backgroundColor: AppTheme.cardWhite,
+      borderColor: AppTheme.borderLight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -164,11 +168,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.mint,
+                  color: AppTheme.primaryLight,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.borderBlack, width: 2),
+                  border: Border.all(color: AppTheme.primary.withValues(alpha: 0.15), width: 1.0),
                 ),
-                child: const Icon(Icons.key_rounded, size: 22),
+                child: const Icon(Icons.key_rounded, size: 22, color: AppTheme.primary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -190,16 +194,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.mint,
+                color: AppTheme.emeraldBg,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderBlack, width: 2),
+                border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.25), width: 1.0),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     '⚠️ Copy your new API Key now. You will not be able to see it again!',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.emeraldText),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -211,7 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.copy_rounded, size: 20),
+                        icon: const Icon(Icons.copy_rounded, size: 20, color: AppTheme.emeraldText),
                         onPressed: () => _copyToClipboard(settings.newRawKey!, 'API Key copied to clipboard!'),
                       ),
                     ],
@@ -227,7 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.canvas,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                border: Border.all(color: AppTheme.borderLight, width: 1.0),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,11 +242,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppTheme.mint,
+                          color: AppTheme.emeraldBg,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.borderBlack, width: 1),
+                          border: Border.all(color: AppTheme.emerald.withValues(alpha: 0.25), width: 1),
                         ),
-                        child: const Text('ACTIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                        child: const Text('ACTIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppTheme.emeraldText)),
                       ),
                     ],
                   ),
@@ -269,6 +273,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       minimumSize: const Size(0, 42),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onPressed: _showRegenerateDialog,
                     icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -282,8 +287,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.lavender,
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: settings.isLoading ? null : () => settings.generateApiKey(),
               icon: const Icon(Icons.add_rounded),
@@ -298,13 +305,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildLogoutButton(AuthProvider auth) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppTheme.softRed,
-        foregroundColor: AppTheme.textPrimary,
+        backgroundColor: AppTheme.roseBg,
+        foregroundColor: AppTheme.roseText,
+        elevation: 0,
+        side: BorderSide(color: AppTheme.rose.withValues(alpha: 0.25), width: 1.0),
         minimumSize: const Size(double.infinity, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       onPressed: () => auth.logout(),
       icon: const Icon(Icons.logout_rounded),
-      label: const Text('Sign Out'),
+      label: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700)),
     );
   }
 }

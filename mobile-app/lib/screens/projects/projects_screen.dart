@@ -37,12 +37,17 @@ class ProjectsScreen extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppTheme.lavender,
+                          color: AppTheme.primary,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppTheme.borderBlack, width: 2.5),
-                          boxShadow: AppTheme.cardShadow,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.primary.withValues(alpha: 0.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
                         ),
-                        child: const Icon(Icons.add, size: 22),
+                        child: const Icon(Icons.add_rounded, size: 22, color: Colors.white),
                       ),
                     ),
                 ],
@@ -118,16 +123,13 @@ class _ProjectCardState extends State<_ProjectCard> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = [AppTheme.lavender, AppTheme.mint, AppTheme.peach, AppTheme.skyBlue];
-    final color = colors[widget.project.id.hashCode % colors.length];
-
     return GestureDetector(
       onLongPress: () => _showDeleteDialog(context),
       child: Container(
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: AppTheme.cardRadius,
-          border: AppTheme.cardBorder,
+          color: AppTheme.cardWhite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.borderLight, width: 1.0),
           boxShadow: AppTheme.cardShadow,
         ),
         child: Stack(
@@ -135,13 +137,13 @@ class _ProjectCardState extends State<_ProjectCard> {
             // Thumbnail
             if (widget.project.thumbnailUrl != null)
               ClipRRect(
-                borderRadius: BorderRadius.circular(21),
+                borderRadius: BorderRadius.circular(16),
                 child: CachedNetworkImage(
                   imageUrl: widget.project.thumbnailUrl!,
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: Colors.black.withValues(alpha: 0.25),
                   colorBlendMode: BlendMode.darken,
                 ),
               ),
@@ -160,6 +162,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                             color: widget.project.thumbnailUrl != null
                                 ? Colors.white
                                 : AppTheme.textPrimary,
+                            fontWeight: FontWeight.w800,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -173,29 +176,42 @@ class _ProjectCardState extends State<_ProjectCard> {
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: AppTheme.cardWhite,
+                            color: AppTheme.canvas,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                            border: Border.all(color: AppTheme.borderLight, width: 1.0),
                           ),
-                          child: const Icon(Icons.edit, size: 14),
+                          child: const Icon(Icons.edit_rounded, size: 14, color: AppTheme.textBody),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       GestureDetector(
                         onTap: _uploading ? null : _pickThumbnail,
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: AppTheme.cardWhite,
+                            color: AppTheme.canvas,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                            border: Border.all(color: AppTheme.borderLight, width: 1.0),
                           ),
                           child: _uploading
                               ? const SizedBox(
                                   width: 14,
                                   height: 14,
                                   child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.image, size: 14),
+                              : const Icon(Icons.image_outlined, size: 14, color: AppTheme.textBody),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => _showDeleteDialog(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.roseBg,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.rose.withValues(alpha: 0.2), width: 1.0),
+                          ),
+                          child: const Icon(Icons.delete_outline_rounded, size: 14, color: AppTheme.roseText),
                         ),
                       ),
                     ],
@@ -205,7 +221,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                     widget.project.description,
                     style: AppTheme.body(context).copyWith(
                       color: widget.project.thumbnailUrl != null
-                          ? Colors.white70
+                          ? Colors.white.withValues(alpha: 0.9)
                           : AppTheme.textBody,
                     ),
                     maxLines: 2,
@@ -214,17 +230,30 @@ class _ProjectCardState extends State<_ProjectCard> {
                   const Spacer(),
                   Wrap(
                     spacing: 6,
+                    runSpacing: 4,
                     children: widget.project.techStack.take(3).map((tech) {
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppTheme.cardWhite,
+                          color: widget.project.thumbnailUrl != null
+                              ? Colors.black.withValues(alpha: 0.5)
+                              : AppTheme.primaryLight,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppTheme.borderBlack, width: 1.5),
+                          border: Border.all(
+                            color: widget.project.thumbnailUrl != null
+                                ? Colors.white.withValues(alpha: 0.2)
+                                : AppTheme.primary.withValues(alpha: 0.15),
+                            width: 1.0,
+                          ),
                         ),
-                        child: Text(tech,
-                            style: const TextStyle(
-                                fontSize: 10, fontWeight: FontWeight.w700)),
+                        child: Text(
+                          tech,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: widget.project.thumbnailUrl != null ? Colors.white : AppTheme.primary,
+                          ),
+                        ),
                       );
                     }).toList(),
                   ),
@@ -242,19 +271,26 @@ class _ProjectCardState extends State<_ProjectCard> {
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: AppTheme.borderBlack, width: 3),
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.borderLight, width: 1.0),
         ),
         title: const Text('Delete Project?'),
-        content: Text(widget.project.title),
+        content: Text('Are you sure you want to remove "${widget.project.title}" from your database portfolio?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textCaption)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               context.read<StudentProvider>().deleteProject(widget.project.id);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.softRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             child: const Text('Delete'),
           ),
         ],

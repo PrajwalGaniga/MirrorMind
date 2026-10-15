@@ -146,7 +146,7 @@ export default function Projects() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="form-row-2col">
             <div className="form-group">
               <label className="form-label">GitHub URL</label>
               <input type="url" className="form-input" value={githubUrl} onChange={e => setGithubUrl(e.target.value)} placeholder="https://github.com/..." />
@@ -157,7 +157,7 @@ export default function Projects() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="form-row-2col">
             <div className="form-group">
               <label className="form-label"><ImageIcon size={16} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Thumbnail Image</label>
               <input id="thumb-input" type="file" accept="image/*" className="form-input" onChange={e => setThumbnailFile(e.target.files[0])} />
@@ -179,7 +179,7 @@ export default function Projects() {
             No projects added yet.
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
+          <div className="responsive-grid-auto">
             {projects.map(p => (
               <div key={p.id} className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {p.thumbnail_url ? (
@@ -191,25 +191,25 @@ export default function Projects() {
                 )}
                 
                 <div style={{ padding: 20, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 8 }}>{p.title}</div>
-                  <div style={{ color: 'var(--text-secondary)', marginBottom: 16, flex: 1 }}>{p.description}</div>
+                  <div style={{ fontWeight: 800, fontSize: 18, color: 'var(--navy-900)', marginBottom: 8 }}>{p.title}</div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.5, marginBottom: 16, flex: 1 }}>{p.description}</div>
                   
                   {(p.github_url || p.live_demo_url) && (
                     <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                      {p.github_url && <a href={p.github_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-blue)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>GitHub ↗</a>}
-                      {p.live_demo_url && <a href={p.live_demo_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-purple)', textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>Live Demo ↗</a>}
+                      {p.github_url && <a href={p.github_url} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>GitHub ↗</a>}
+                      {p.live_demo_url && <a href={p.live_demo_url} target="_blank" rel="noreferrer" style={{ color: 'var(--purple-500)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>Live Demo ↗</a>}
                     </div>
                   )}
 
                   {p.tech_stack && p.tech_stack.length > 0 && (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
                       {p.tech_stack.map(t => (
-                        <span key={t} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', border: '1px solid #000', borderRadius: 99, background: 'var(--bg-primary)' }}>{t}</span>
+                        <span key={t} style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', border: '1px solid var(--slate-200)', borderRadius: 99, background: 'var(--slate-100)', color: 'var(--navy-800)' }}>{t}</span>
                       ))}
                     </div>
                   )}
 
-                  <button className="btn btn-secondary btn-sm" onClick={() => handleDelete(p.id)} style={{ color: 'var(--accent-rose)', borderColor: 'var(--accent-rose)', alignSelf: 'flex-start' }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => handleDelete(p.id)} style={{ color: 'var(--rose-500)', borderColor: '#FECACA', alignSelf: 'flex-start' }}>
                     Delete
                   </button>
                 </div>
