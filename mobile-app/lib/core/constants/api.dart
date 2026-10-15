@@ -1,26 +1,13 @@
 class ApiConstants {
-  // Target environment: 'render' | 'ngrok' | 'local'
-  static const String targetEnv = 'render';
-  static const bool useNgrok = true; // Legacy toggle kept for backward compatibility
-
-  // ── Change this to your machine's IP when testing on a physical device ──
+  // ── Available Environments (toggle baseUrl below) ──
   // Use 10.0.2.2 for Android emulator (maps to localhost)
-  static const String _localUrl = 'http://10.0.2.2:8000/api';
-  static const String _ngrokUrl = 'https://dawdlingly-pseudoinsane-pa.ngrok-free.dev/api';
-  static const String _renderUrl = 'https://mirrormind-uwiz.onrender.com/api';
+  static const String localUrl = 'http://10.0.2.2:8000/api';
+  static const String ngrokUrl = 'https://dawdlingly-pseudoinsane-pa.ngrok-free.dev/api';
+  static const String renderUrl = 'https://mirrormind-uwiz.onrender.com/api';
 
-  static String get baseUrl {
-    switch (targetEnv) {
-      case 'render':
-        return _renderUrl;
-      case 'local':
-        return _localUrl;
-      case 'ngrok':
-        return _ngrokUrl;
-      default:
-        return useNgrok ? _ngrokUrl : _localUrl;
-    }
-  }
+  // Active Base URL — toggle between renderUrl, ngrokUrl, or localUrl
+  static const String baseUrl = renderUrl;
+  static const bool useNgrok = true; // Legacy toggle kept for backward compatibility
 
   // ── WebSockets ──
   static String get wsBaseUrl {
